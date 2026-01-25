@@ -10,6 +10,8 @@ function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
 }
 
+import { createPortal } from "react-dom";
+
 interface ModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -18,7 +20,10 @@ interface ModalProps {
 }
 
 export const Modal = ({ isOpen, onClose, children, className }: ModalProps) => {
+    const [mounted, setMounted] = React.useState(false);
+
     useEffect(() => {
+        setMounted(true);
         if (isOpen) {
             document.body.style.overflow = "hidden";
         } else {
@@ -29,10 +34,12 @@ export const Modal = ({ isOpen, onClose, children, className }: ModalProps) => {
         };
     }, [isOpen]);
 
-    return (
+    if (!mounted) return null;
+
+    return createPortal(
         <AnimatePresence>
             {isOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
@@ -46,7 +53,7 @@ export const Modal = ({ isOpen, onClose, children, className }: ModalProps) => {
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
                         className={cn(
-                            "relative z-99 w-full max-w-md overflow-hidden rounded-2xl md:rounded-lg bg-white p-6 shadow-2xl dark:bg-gray-900 border-none space-y-4",
+                            "relative z-[101] w-full max-w-md overflow-hidden rounded-2xl md:rounded-lg bg-white p-6 shadow-2xl dark:bg-gray-900 border-none space-y-4",
                             className
                         )}
                     >
@@ -62,7 +69,8 @@ export const Modal = ({ isOpen, onClose, children, className }: ModalProps) => {
                     </motion.dialog>
                 </div>
             )}
-        </AnimatePresence>
+        </AnimatePresence>,
+        document.body
     );
 };
 

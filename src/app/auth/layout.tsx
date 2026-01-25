@@ -13,7 +13,7 @@ export default function AuthLayout({
         <div className="flex min-h-screen w-full">
             <div className="flex w-full overflow-hidden bg-white lg:flex-row">
                 {/* Left side: Content */}
-                <div className="flex flex-1 flex-col overflow-y-auto px-6 py-10 md:px-12 lg:px-16 lg:py-12">
+                <div className="relative z-10 flex flex-1 flex-col overflow-y-auto px-6 py-10 md:px-12 lg:px-16 lg:py-12">
                     <main className="mx-auto w-full max-w-[440px] flex-1">
                         <div className="mb-4">
                             <Logo />
