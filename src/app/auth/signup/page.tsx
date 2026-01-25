@@ -7,7 +7,7 @@ import Button from "@/components/Button";
 import SignupSuccessModal from "@/components/SignupSuccessModal";
 
 export default function SignupPage() {
-    const [isOpen, setIsOpen] = useState(true);
+    const [isOpen, setIsOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
