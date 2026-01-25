@@ -1,5 +1,33 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: 'BR Firma';
+  src: url('/fonts/BR Firma Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'BR Firma';
+  src: url('/fonts/BR Firma Medium.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'BR Firma';
+  src: url('/fonts/BR Firma SemiBold.otf') format('opentype');
+  font-weight: 600;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'BR Firma';
+  src: url('/fonts/BR Firma Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #111827;
@@ -10,8 +38,8 @@
   /* Zendvo Brand Colors */
   --primary: #5A42DE;
   --primary-foreground: #FFFFFF;
-  --primary-hover: #6D28D9;
-  --primary-active: #5B21B6;
+  --primary-hover: #4A32CE;
+  --primary-active: #3A22BE;
 
   --secondary: #F3F4F6;
   --secondary-foreground: #111827;
@@ -36,11 +64,10 @@
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
 
-  --color-brand-purple: #7C3AED;
-  --color-brand-purple-light: #A78BFA;
-  --color-brand-purple-dark: #5B21B6;
+  --color-black: var(--black);
+  --color-grey: var(--grey);
 
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'BR Firma', ui-sans-serif, system-ui, sans-serif;
 
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
@@ -80,6 +107,7 @@
   body {
     background-color: var(--background);
     color: var(--foreground);
+    font-family: var(--font-sans);
     @apply font-sans antialiased;
   }
 }

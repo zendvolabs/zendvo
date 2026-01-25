@@ -38,7 +38,7 @@ export const Modal = ({ isOpen, onClose, children, className }: ModalProps) => {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={onClose}
-                        className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+                        className="fixed inset-0 bg-[#11172429] backdrop-blur-[12px]"
                     />
                     <motion.dialog
                         open
@@ -46,16 +46,18 @@ export const Modal = ({ isOpen, onClose, children, className }: ModalProps) => {
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
                         className={cn(
-                            "relative z-99 w-full max-w-md overflow-hidden rounded-lg bg-white p-6 shadow-2xl dark:bg-gray-900 border-none space-y-4",
+                            "relative z-99 w-full max-w-md overflow-hidden rounded-2xl md:rounded-lg bg-white p-6 shadow-2xl dark:bg-gray-900 border-none space-y-4",
                             className
                         )}
                     >
-                        <button
-                            onClick={onClose}
-                            className="mb-8"
-                        >
-                            <X className="size-5" />
-                        </button>
+                        <div className="mb-4 md:mb-8 pb-4 md:pb-0 border-b md:border-none">
+                            <button
+                                onClick={onClose}
+                                className=""
+                            >
+                                <X className="size-5" />
+                            </button>
+                        </div>
                         {children}
                     </motion.dialog>
                 </div>
@@ -70,7 +72,7 @@ export const ModalHeader = ({
     className
 }: { title: string; icon?: React.ReactNode; className?: string }) => (
     <div className={cn("text-center", className)}>
-        <div className="mx-auto mb-4 flex h-[120px] w-[120px] items-center justify-center rounded-full bg-primary border-[12px] border-white/72 mb-6">
+        <div className="mx-auto mb-4 flex h-[66px] md:h-[120px] w-[66px] md:w-[120px] items-center justify-center rounded-full bg-primary border-[6.6px] md:border-[12px] border-white/72 mb-6">
             {icon}
         </div>
         <h2 className="text-lg font-bold text-black dark:text-white">{title}</h2>

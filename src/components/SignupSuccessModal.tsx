@@ -1,9 +1,8 @@
 "use client";
 
-import React from "react";
-import { Check } from "lucide-react";
 import { Modal, ModalHeader, ModalBody, ModalFooter } from "./Modal";
 import Button from "./Button";
+import Icon from "./Icon";
 // import Icon from "./Icon";
 
 interface SignupSuccessModalProps {
@@ -17,9 +16,7 @@ const SignupSuccessModal = ({ isOpen, onClose, onProceed }: SignupSuccessModalPr
         <Modal isOpen={isOpen} onClose={onClose}>
             <ModalHeader
                 title="Signup successful"
-                icon={(
-                    <img src="/img/cheers.svg" />
-                )}
+                icon={<Icon src="/img/cheers.svg" />}
             />
             <ModalBody
                 message="start receiving surprises from the people who matter."
