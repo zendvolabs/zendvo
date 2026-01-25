@@ -15,16 +15,16 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({ children, showcaseConten
     <div className="min-h-screen flex flex-col   lg:flex-row">
       {/* Left Side - Form */}
       <div className="w-full  lg:w-1/2 flex flex-col relative justify-center bg-white">
-        {/* Logo */}
-        <div className=" absolute top-8 left-5 lg:top-18 xl:top-20 md:left-40 lg:left-20 xl:left-38 ">
-          <Link href="/" className="inline-flex items-center gap-2">
-            <Image src={LogoImage.src} width={LogoImage.width} height={LogoImage.height} blurDataURL={LogoImage.blurDataURL} alt='Zendvo company logo' className='max-h-8 w-auto'/>
-          </Link>
-        </div>
 
         {/* Form Content */}
         <div className="flex-1 flex items-center mt-20 justify-center px-6 lg:px-16 pb-12">
           <div className="w-full  max-w-110">
+            {/* Logo */}
+            <div className="mb-4">
+              <Link href="/" className="inline-flex items-center gap-2">
+                <Image src={LogoImage.src} width={LogoImage.width} height={LogoImage.height} blurDataURL={LogoImage.blurDataURL} alt='Zendvo company logo' className='max-h-8 w-auto' />
+              </Link>
+            </div>
             {children}
           </div>
         </div>
