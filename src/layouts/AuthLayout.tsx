@@ -14,23 +14,23 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({ children, showcaseConten
   return (
     <div className="min-h-screen flex flex-col   lg:flex-row">
       {/* Left Side - Form */}
-      <div className="w-full  lg:w-1/2 flex flex-col relative justify-center bg-white">
+      <div className="w-full lg:w-1/2 flex flex-col relative bg-white min-h-screen lg:min-h-0">
         {/* Logo */}
-        <div className=" absolute top-8 left-5 lg:top-18 xl:top-20 md:left-40 lg:left-20 xl:left-38 ">
+        <div className="w-full pt-8 pl-5 md:pl-40 lg:pl-20 xl:pl-38 lg:pt-18 xl:pt-20">
           <Link href="/" className="inline-flex items-center gap-2">
-            <Image src={LogoImage.src} width={LogoImage.width} height={LogoImage.height} blurDataURL={LogoImage.blurDataURL} alt='Zendvo company logo' className='max-h-8 w-auto'/>
+            <Image src={LogoImage.src} width={LogoImage.width} height={LogoImage.height} blurDataURL={LogoImage.blurDataURL} alt='Zendvo company logo' className='max-h-8 w-auto' />
           </Link>
         </div>
 
         {/* Form Content */}
-        <div className="flex-1 flex items-center mt-20 justify-center px-6 lg:px-16 pb-12">
-          <div className="w-full  max-w-110">
+        <div className="flex-1 flex flex-col lg:items-center justify-center px-6 lg:px-16 pb-12">
+          <div className="w-full max-w-110 flex-1 flex flex-col justify-center">
             {children}
           </div>
         </div>
 
         {/* Footer Links */}
-        <div className=" -bottom-5 w-full md:-bottom-10 lg:bottom-6 left-1/2 -translate-1/2 absolute">
+        <div className="w-full pb-6 lg:pb-0 lg:absolute lg:bottom-6 lg:left-1/2 lg:-translate-1/2">
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[13px] text-[#717182]">
             <Link href="/help" className="hover:text-[#030213] transition-colors">
               Help
