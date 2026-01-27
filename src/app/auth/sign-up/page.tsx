@@ -8,6 +8,7 @@ import { Input } from '@/components/Input';
 import { PhoneInput } from '@/components/PhoneInput';
 import { PasswordInput } from '@/components/PasswordInput';
 import Button from '@/components/Button';
+import SignupSuccessModal from '@/components/SignupSuccessModal';
 
 interface FormData {
   fullName: string;
@@ -26,7 +27,7 @@ interface FormErrors {
   confirmPassword?: string;
 }
 
- const SignUp: React.FC = () => {
+const SignUp: React.FC = () => {
   const route = useRouter();
   const [formData, setFormData] = useState<FormData>({
     fullName: '',
@@ -36,6 +37,7 @@ interface FormErrors {
     password: '',
     confirmPassword: '',
   });
+  const [isOpen, setIsOpen] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [isLoading, setIsLoading] = useState(false);
 
@@ -107,22 +109,22 @@ interface FormErrors {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
 
     setIsLoading(true);
 
+
     // Simulate API call
     try {
       await new Promise(resolve => setTimeout(resolve, 1500));
-      
+
       // In a real application, you would make an API call here
       console.log('Form submitted:', formData);
-      
-      // Navigate to success page or dashboard
-      route.push('/dashboard');
+      setIsOpen(true);
+
     } catch (error) {
       console.error('Sign up error:', error);
       setErrors({ email: 'An error occurred. Please try again.' });
@@ -141,17 +143,27 @@ interface FormErrors {
     }
   };
 
+  const handleProceed = () => {
+    setIsOpen(false);
+    route.push('/dashboard');
+  };
+
   return (
     <AuthLayout showcaseContent={<WorldMapShowcase />}>
+      <SignupSuccessModal
+        isOpen={isOpen}
+        onClose={() => setIsOpen(false)}
+        onProceed={handleProceed}
+      />
       <div className='space-y-10'>
-       <div className='gap-1 flex flex-col'>
-         <h1 className="text-xl md:text-[2rem] leading-5 md:leading-10 tracking-[-0%] font-bold text-[#18181B] ">
-          Create an account
-        </h1>
-        <p className="text-xs text-[#18181B] leading-[100%] tracking-[0%] ">
-          To start receiving cash gifts
-        </p>
-       </div>
+        <div className='gap-1 flex flex-col'>
+          <h1 className="text-xl md:text-[2rem] leading-5 md:leading-10 tracking-[-0%] font-bold text-[#18181B] ">
+            Create an account
+          </h1>
+          <p className="text-xs text-[#18181B] leading-[100%] tracking-[0%] ">
+            To start receiving cash gifts
+          </p>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <Input
@@ -212,13 +224,13 @@ interface FormErrors {
 
           <div className="pt-2">
             <Button type="submit" variant='primary' className='w-full bg-[#5A42DE]! rounded-lg! text-base! font-medium! cursor-pointer ' isLoading={isLoading}>
-Create Account            </Button>
+              Create Account            </Button>
           </div>
 
           <p className="text-center text-[14px] text-[#717182] pt-2">
             Already have an account?{' '}
-            <Link 
-              href="/login" 
+            <Link
+              href="/login"
               className="text-[#6c5ce7] hover:text-[#5f51d8] font-medium transition-colors"
             >
               Log in
