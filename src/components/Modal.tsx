@@ -53,11 +53,11 @@ export const Modal = ({ isOpen, onClose, children, className }: ModalProps) => {
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
                         className={cn(
-                            "relative z-[101] w-full max-w-md overflow-hidden rounded-2xl md:rounded-lg bg-white p-6 shadow-2xl dark:bg-gray-900 border-none space-y-4",
+                            "relative z-[101] w-full max-w-md overflow-hidden rounded-2xl md:rounded-lg bg-white p-6 shadow-2xl border-none space-y-4",
                             className
                         )}
                     >
-                        <div className="mb-4 md:mb-8 pb-4 md:pb-0 border-b md:border-none">
+                        <div className="mb-4 md:mb-8 pb-4 md:pb-0 border-b md:border-none cursor-pointer">
                             <button
                                 onClick={onClose}
                                 className=""
@@ -83,7 +83,7 @@ export const ModalHeader = ({
         <div className="mx-auto mb-4 flex h-[66px] md:h-[120px] w-[66px] md:w-[120px] items-center justify-center rounded-full bg-primary border-[6.6px] md:border-[12px] border-white/72 mb-6">
             {icon}
         </div>
-        <h2 className="text-lg font-bold text-black dark:text-white">{title}</h2>
+        <h2 className="text-lg font-bold text-black">{title}</h2>
     </div>
 );
 

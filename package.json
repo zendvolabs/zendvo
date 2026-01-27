@@ -10,17 +10,23 @@
   },
   "dependencies": {
     "clsx": "^2.1.1",
+    "@stellar/stellar-sdk": "^14.4.3",
+    "@tailwindcss/postcss": "^4.1.18",
     "framer-motion": "^12.29.0",
     "lucide-react": "^0.563.0",
     "next": "16.1.2",
     "postcss": "^8.5.6",
+    "qrcode": "^1.5.4",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "tailwind-merge": "^3.4.0"
+    "stripe": "^20.2.0",
+    "tailwind-merge": "^3.4.0",
+    "tailwindcss": "^4.1.18"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.18",
     "@types/node": "^20",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "autoprefixer": "^10.4.23",
