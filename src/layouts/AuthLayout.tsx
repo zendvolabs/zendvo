@@ -1,5 +1,4 @@
 import React, { ReactNode } from 'react';
-import { Check } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 
@@ -15,16 +14,16 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({ children, showcaseConten
     <div className="min-h-screen flex flex-col   lg:flex-row">
       {/* Left Side - Form */}
       <div className="w-full lg:w-1/2 flex flex-col relative bg-white min-h-screen lg:min-h-0">
-        {/* Logo */}
-        <div className="w-full pt-8 pl-5 md:pl-40 lg:pl-20 xl:pl-38 lg:pt-18 xl:pt-20">
-          <Link href="/" className="inline-flex items-center gap-2">
-            <Image src={LogoImage.src} width={LogoImage.width} height={LogoImage.height} blurDataURL={LogoImage.blurDataURL} alt='Zendvo company logo' className='max-h-8 w-auto' />
-          </Link>
-        </div>
 
         {/* Form Content */}
         <div className="flex-1 flex flex-col lg:items-center justify-center px-6 lg:px-16 pb-12">
           <div className="w-full max-w-110 flex-1 flex flex-col justify-center">
+            {/* Logo */}
+            <div className="mb-4">
+              <Link href="/" className="inline-flex items-center gap-2">
+                <Image src={LogoImage.src} width={LogoImage.width} height={LogoImage.height} blurDataURL={LogoImage.blurDataURL} alt='Zendvo company logo' className='max-h-8 w-auto' />
+              </Link>
+            </div>
             {children}
           </div>
         </div>
