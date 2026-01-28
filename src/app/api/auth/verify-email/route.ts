@@ -6,7 +6,6 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { userId, otp } = body;
 
-    // Validate input
     if (!userId || !otp) {
       return NextResponse.json(
         { error: "userId and otp are required" },
@@ -14,7 +13,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate OTP format (6-digit numeric)
     if (!/^\d{6}$/.test(otp)) {
       return NextResponse.json(
         { error: "Invalid OTP format. Must be 6 digits." },
@@ -22,19 +20,17 @@ export async function POST(request: Request) {
       );
     }
 
-    // Verify OTP
     const result = await verifyOTP(userId, otp);
 
     if (!result.success) {
-      // Determine appropriate status code
       let statusCode = 400;
       if (result.message?.includes("expired")) {
-        statusCode = 400; // Bad Request - expired
+        statusCode = 400;
       } else if (
         result.locked ||
         result.message?.includes("Maximum attempts")
       ) {
-        statusCode = 429; // Too Many Requests - locked out
+        statusCode = 429;
       }
 
       return NextResponse.json(
@@ -47,10 +43,7 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      message: result.message,
-    });
+    return NextResponse.json({ success: true, message: result.message });
   } catch (error) {
     console.error("Error in verify-email:", error);
     return NextResponse.json(

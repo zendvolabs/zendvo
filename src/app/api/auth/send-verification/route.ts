@@ -10,7 +10,6 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { userId, email, name } = body;
 
-    // Validate input
     if (!userId || !email) {
       return NextResponse.json(
         { error: "userId and email are required" },
@@ -18,16 +17,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if user exists
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-    });
+    const user = await prisma.user.findUnique({ where: { id: userId } });
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Check if user is already verified
     if (user.status === "active") {
       return NextResponse.json(
         { message: "Email already verified" },
@@ -35,19 +30,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // Generate OTP
     const otp = generateOTP();
-
-    // Store OTP in database
     await storeOTP(userId, otp);
 
-    // Send verification email
     const emailResult = await sendVerificationEmail(email, otp, name);
 
     if (!emailResult.success) {
       console.error("Failed to send email:", emailResult.error);
-      // Still return success since OTP is stored
-      // In development, OTP is logged to console
     }
 
     return NextResponse.json({

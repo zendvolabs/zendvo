@@ -1,27 +1,17 @@
 import nodemailer from "nodemailer";
 
-// Email configuration (placeholder - should be moved to environment variables)
 const EMAIL_CONFIG = {
   host: process.env.SMTP_HOST || "smtp.gmail.com",
   port: parseInt(process.env.SMTP_PORT || "587"),
-  secure: false, // true for 465, false for other ports
+  secure: false,
   auth: {
     user: process.env.SMTP_USER || "your-email@example.com",
     pass: process.env.SMTP_PASS || "your-password",
   },
 };
 
-/**
- * Create reusable transporter
- */
-const transporter = nodemailer.createTransporter(EMAIL_CONFIG);
+const transporter = nodemailer.createTransport(EMAIL_CONFIG);
 
-/**
- * Send verification email with OTP
- * @param email - Recipient email address
- * @param otp - 6-digit OTP code
- * @param userName - Optional user name for personalization
- */
 export async function sendVerificationEmail(
   email: string,
   otp: string,
@@ -36,7 +26,6 @@ export async function sendVerificationEmail(
   };
 
   try {
-    // For development: log OTP to console instead of sending email
     if (process.env.NODE_ENV === "development") {
       console.log("=".repeat(50));
       console.log("📧 VERIFICATION EMAIL (Development Mode)");
@@ -45,7 +34,6 @@ export async function sendVerificationEmail(
       console.log(`OTP Code: ${otp}`);
       console.log(`Expires: 10 minutes`);
       console.log("=".repeat(50));
-
       return {
         success: true,
         messageId: "dev-mode",
@@ -63,15 +51,12 @@ export async function sendVerificationEmail(
     };
   } catch (error) {
     console.error("Error sending verification email:", error);
-
-    // In development, still log the OTP even if email fails
     if (process.env.NODE_ENV === "development") {
       console.log("=".repeat(50));
       console.log("📧 EMAIL FAILED - OTP CODE:");
       console.log(`OTP: ${otp}`);
       console.log("=".repeat(50));
     }
-
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",

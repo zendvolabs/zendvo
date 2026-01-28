@@ -4,19 +4,16 @@ import { sendVerificationEmail } from "@/server/services/emailService";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
-
-// Rate limiting: Track resend attempts per user
 const resendAttempts = new Map<string, { count: number; resetAt: number }>();
 
 const MAX_RESENDS_PER_HOUR = 3;
-const RATE_LIMIT_WINDOW = 60 * 60 * 1000; // 1 hour in milliseconds
+const RATE_LIMIT_WINDOW = 60 * 60 * 1000;
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { userId, email, name } = body;
 
-    // Validate input
     if (!userId || !email) {
       return NextResponse.json(
         { error: "userId and email are required" },
@@ -24,12 +21,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check rate limiting
     const now = Date.now();
     const userAttempts = resendAttempts.get(userId);
 
     if (userAttempts) {
-      // Reset if window has passed
       if (now > userAttempts.resetAt) {
         resendAttempts.delete(userId);
       } else if (userAttempts.count >= MAX_RESENDS_PER_HOUR) {
@@ -47,16 +42,12 @@ export async function POST(request: Request) {
       }
     }
 
-    // Check if user exists
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-    });
+    const user = await prisma.user.findUnique({ where: { id: userId } });
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Check if user is already verified
     if (user.status === "active") {
       return NextResponse.json(
         { message: "Email already verified" },
@@ -64,20 +55,15 @@ export async function POST(request: Request) {
       );
     }
 
-    // Generate new OTP
     const otp = generateOTP();
-
-    // Store new OTP (this automatically invalidates previous OTPs)
     await storeOTP(userId, otp);
 
-    // Send verification email
     const emailResult = await sendVerificationEmail(email, otp, name);
 
     if (!emailResult.success) {
       console.error("Failed to send email:", emailResult.error);
     }
 
-    // Update rate limiting
     if (userAttempts) {
       userAttempts.count++;
     } else {
