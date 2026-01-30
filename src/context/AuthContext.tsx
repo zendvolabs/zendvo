@@ -31,12 +31,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate initial auth check
     const checkAuth = async () => {
       try {
-        // Placeholder for token check
-        // const storedUser = localStorage.getItem("user");
-        // if (storedUser) setUser(JSON.parse(storedUser));
       } finally {
         setIsLoading(false);
       }
@@ -47,11 +43,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   const login = async (email: string) => {
     setIsLoading(true);
     try {
-      // Simulate API call
       await new Promise((resolve) => setTimeout(resolve, 1000));
       const newUser = { id: "1", email, name: email.split("@")[0] };
       setUser(newUser);
-      // localStorage.setItem("user", JSON.stringify(newUser));
     } finally {
       setIsLoading(false);
     }
@@ -59,7 +53,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
   const logout = () => {
     setUser(null);
-    // localStorage.removeItem("user");
   };
 
   return (

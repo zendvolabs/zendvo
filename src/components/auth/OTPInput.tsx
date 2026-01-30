@@ -1,6 +1,13 @@
 "use client";
 
-import React, { useRef, useState, ClipboardEvent, KeyboardEvent, ChangeEvent, useEffect } from "react";
+import React, {
+  useRef,
+  useState,
+  ClipboardEvent,
+  KeyboardEvent,
+  ChangeEvent,
+  useEffect,
+} from "react";
 
 interface OTPInputProps {
   length?: number;
@@ -29,19 +36,16 @@ const OTPInput: React.FC<OTPInputProps> = ({
     if (isNaN(Number(value))) return;
 
     const newOtp = [...otp];
-    // Allow only the last entered character
     newOtp[index] = value.substring(value.length - 1);
     setOtp(newOtp);
 
     const otpString = newOtp.join("");
     if (onChange) onChange(otpString);
 
-    // Call onComplete when all digits are filled
     if (otpString.length === length && !newOtp.includes("")) {
       if (onComplete) onComplete(otpString);
     }
 
-    // Move to next input if value is entered
     if (value && index < length - 1 && inputRefs.current[index + 1]) {
       inputRefs.current[index + 1]?.focus();
     }
@@ -49,16 +53,19 @@ const OTPInput: React.FC<OTPInputProps> = ({
 
   const handleClick = (index: number) => {
     inputRefs.current[index]?.setSelectionRange(1, 1);
-    
-    // Optional: validation to prevent skipping inputs
+
     if (index > 0 && !otp[index - 1]) {
       inputRefs.current[otp.indexOf("")]?.focus();
     }
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>, index: number) => {
-    if (e.key === "Backspace" && !otp[index] && index > 0 && inputRefs.current[index - 1]) {
-      // Move to previous input on backspace if current is empty
+    if (
+      e.key === "Backspace" &&
+      !otp[index] &&
+      index > 0 &&
+      inputRefs.current[index - 1]
+    ) {
       inputRefs.current[index - 1]?.focus();
     }
   };
@@ -66,20 +73,19 @@ const OTPInput: React.FC<OTPInputProps> = ({
   const handlePaste = (e: ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
     const pastedData = e.clipboardData.getData("text/plain").slice(0, length);
-    
-    if (!/^\d+$/.test(pastedData)) return; // Only allow numbers
+
+    if (!/^\d+$/.test(pastedData)) return;
 
     const newOtp = [...otp];
     pastedData.split("").forEach((char, i) => {
       newOtp[i] = char;
     });
     setOtp(newOtp);
-    
+
     const otpString = newOtp.join("");
     if (onChange) onChange(otpString);
     if (otpString.length === length && onComplete) onComplete(otpString);
 
-    // Focus existing or last filled index
     const focusIndex = Math.min(pastedData.length, length - 1);
     inputRefs.current[focusIndex]?.focus();
   };
@@ -93,7 +99,7 @@ const OTPInput: React.FC<OTPInputProps> = ({
           inputMode="numeric"
           maxLength={1}
           ref={(ref) => {
-              inputRefs.current[index] = ref;
+            inputRefs.current[index] = ref;
           }}
           value={digit}
           onChange={(e) => handleChange(e, index)}
@@ -106,9 +112,10 @@ const OTPInput: React.FC<OTPInputProps> = ({
             text-center text-lg font-semibold
             focus:outline-none focus:ring-2 focus:ring-[#6c5ce7]/20
             transition-all duration-200
-            ${error 
-              ? "border-red-500 text-red-500 focus:border-red-500" 
-              : "border-[#E5E7EB] text-[#18181B] focus:border-[#6c5ce7]"
+            ${
+              error
+                ? "border-red-500 text-red-500 focus:border-red-500"
+                : "border-[#E5E7EB] text-[#18181B] focus:border-[#6c5ce7]"
             }
           `}
         />

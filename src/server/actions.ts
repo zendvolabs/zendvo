@@ -3,8 +3,6 @@
 import { revalidatePath } from "next/cache";
 
 export async function createGift(formData: FormData) {
-  // const amount = formData.get("amount");
-  // Simulate database call
   console.log("Creating gift...");
 
   revalidatePath("/dashboard");

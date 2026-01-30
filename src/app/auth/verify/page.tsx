@@ -44,7 +44,6 @@ export default function VerifyPage() {
     setCanResend(false);
     setResendAttempts((prev) => prev + 1);
     setTimeLeft(60);
-    // Add resend API logic here
     console.log("Resending code...");
   };
 
@@ -62,7 +61,6 @@ export default function VerifyPage() {
       return;
     }
 
-    // Simulate API call
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
     // Simple validation simulation (accept any 6 digits for now except 000000)
@@ -107,15 +105,15 @@ export default function VerifyPage() {
               />
             </div>
           )}
-          <h1 className="text-2xl md:text-3xl font-bold text-[#18181B] mb-3">
+          <h1 className="text-3xl md:text-4xl font-bold text-[#18181B] mb-4">
             Verify your email address
           </h1>
-          <p className="text-[#52525B] text-sm md:text-base mb-8">
+          <p className="text-[#52525B] text-base md:text-lg mb-10 leading-relaxed">
             Please enter the verification code sent to your email account{" "}
             <span className="font-medium text-[#18181B]">jo***3@gmail.com</span>
           </p>
 
-          <div className="mb-8">
+          <div className="mb-10">
             <OTPInput
               length={6}
               onChange={handleOtpChange}
@@ -127,41 +125,52 @@ export default function VerifyPage() {
             <button
               onClick={handleResend}
               disabled={!canResend || resendAttempts >= 3}
-              className={`text-sm ${!canResend || resendAttempts >= 3
-                ? "text-[#52525B] cursor-default"
-                : "text-[#52525B] hover:text-[#18181B] transition-colors"
-                }`}
+              className={`text-base font-semibold transition-colors flex items-center gap-2 ${
+                !canResend || resendAttempts >= 3
+                  ? "text-[#717182] cursor-default"
+                  : "text-[#5E44FF] hover:text-[#4D35FF]"
+              }`}
             >
               Resend Code{" "}
-              <span className={`font-medium ${canResend && resendAttempts < 3 ? "text-[#6c5ce7]" : "text-[#52525B]"
-                }`}>
-                {resendAttempts >= 3 ? "Max Limit" : canResend ? "Now" : formatTime(timeLeft)}
+              <span
+                className={`font-bold ${
+                  canResend && resendAttempts < 3
+                    ? "text-[#5E44FF]"
+                    : "text-[#717182]"
+                }`}
+              >
+                {resendAttempts >= 3
+                  ? "(Max Limit)"
+                  : canResend
+                    ? "Now"
+                    : formatTime(timeLeft)}
               </span>
             </button>
           </div>
         </div>
 
-        <div className="flex flex-col items-center gap-4 mt-auto lg:mt-8 w-full">
-
-
+        <div className="flex flex-col items-center gap-6 mt-auto lg:mt-12 w-full">
           <Button
             variant="primary"
-            className="w-full py-6 text-base font-semibold"
+            className="w-full py-7 text-lg font-bold bg-[#5E44FF] hover:bg-[#4D35FF] shadow-lg shadow-purple-200"
             onClick={() => handleVerify()}
             isLoading={isSubmitting}
           >
-            Verify
+            Create Account
           </Button>
 
           <button
             onClick={() => setIsHelpModalOpen(true)}
-            className="text-sm text-[#6c5ce7] hover:underline cursor-pointer"
+            className="text-base font-semibold text-[#5E44FF] hover:underline cursor-pointer"
           >
             Didn&apos;t get OTP Code?
           </button>
         </div>
       </div>
-      <HelpModal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} />
-    </AuthLayout >
+      <HelpModal
+        isOpen={isHelpModalOpen}
+        onClose={() => setIsHelpModalOpen(false)}
+      />
+    </AuthLayout>
   );
 }
