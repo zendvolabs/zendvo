@@ -15,7 +15,7 @@ import GiftSuccessModal from "@/components/gift/GiftSuccessModal";
 const CONTACTS: GiftContact[] = [
   {
     id: "u_1",
-    name: "John Eze (NGN)",
+    name: "Johns Eze (NGN)",
     email: "john.eze@gmail.com",
     phone: "8112345678",
   },
@@ -66,8 +66,9 @@ const formatUnlockLabel = (date: string, time: string): string => {
 export default function DashboardGiftsPage() {
   const [giftValues, setGiftValues] =
     useState<GiftDetailsFormValues>(INITIAL_GIFT_VALUES);
-  const [senderValues, setSenderValues] =
-    useState<SenderDetailsValues>(INITIAL_SENDER_VALUES);
+  const [senderValues, setSenderValues] = useState<SenderDetailsValues>(
+    INITIAL_SENDER_VALUES,
+  );
   const [step, setStep] = useState<FlowStep>("send-gift");
   const [isProceeding, setIsProceeding] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
