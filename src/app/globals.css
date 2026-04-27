@@ -1,8 +1,12 @@
 @import url("https://fonts.cdnfonts.com/css/br-firma");
+@import url("https://fonts.googleapis.com/css2?family=Cherry+Bomb+One&display=swap");
 @import "tailwindcss";
 
 .font-br-firma {
   font-family: "BR Firma", sans-serif;
+}
+.cherry-bomb-one {
+  font-family: "Cherry Bomb One", system-ui;
 }
 
 @keyframes shimmer {
