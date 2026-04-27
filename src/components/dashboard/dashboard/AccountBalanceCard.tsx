@@ -1,3 +1,5 @@
+"use client";
+
 import {
   BankIcon,
   CoinIcon,
@@ -5,9 +7,15 @@ import {
   MoneyBag,
   WithdrawalIcon,
 } from "@/assets/svg";
+import WithdrawalSuccessModal from "@/components/dashboard/withdrawal/WithdrawalSuccessModal";
 import { Copy } from "lucide-react";
+import { useState } from "react";
+
+const DEMO_WITHDRAWAL_AMOUNT = 250;
 
 export const AccountBalanceCard = () => {
+  const [isWithdrawalSuccessOpen, setIsWithdrawalSuccessOpen] = useState(false);
+
   return (
     <div className="p-6 bg-white w-full sm:max-w-102.25 rounded-4xl space-y-8">
       <div className="space-y-5">
@@ -16,9 +24,9 @@ export const AccountBalanceCard = () => {
             <div className="flex items-center justify-between w-full mb-2">
               <div>
                 <span className="leading-6 text-base text-[#18181B] flex items-center">
-                  <div className="mr-2 inline-flex items-center justify-center size-6 bg-[#F7F7FC] rounded-full ">
+                  <span className="mr-2 inline-flex items-center justify-center size-6 bg-[#F7F7FC] rounded-full ">
                     <MoneyBag />
-                  </div>
+                  </span>
                   Account Balance
                 </span>
               </div>
@@ -38,20 +46,31 @@ export const AccountBalanceCard = () => {
               <div className="bg-[#5A42DE] size-10 rounded-xl flex justify-center items-center">
                 <GiftSentIcon />
               </div>
-              <p className="text-sm leading-5 text-[#18181B] whitespace-nowrap">Send Gift</p>
+              <p className="text-sm leading-5 text-[#18181B] whitespace-nowrap">
+                Send Gift
+              </p>
             </div>
             <div className="flex items-center flex-col gap-2">
               <div className="bg-[#5A42DE] size-10 rounded-xl flex justify-center items-center">
                 <BankIcon />
               </div>
-              <p className="text-sm leading-5 text-[#18181B] whitespace-nowrap">Add a Bank</p>
+              <p className="text-sm leading-5 text-[#18181B] whitespace-nowrap">
+                Add a Bank
+              </p>
             </div>
-            <div className="flex items-center flex-col gap-2">
-              <div className="bg-[#5A42DE] size-10 rounded-xl flex justify-center items-center">
+            <button
+              type="button"
+              onClick={() => setIsWithdrawalSuccessOpen(true)}
+              className="flex items-center flex-col gap-2 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5A42DE] focus-visible:ring-offset-2"
+              aria-label="Withdraw funds"
+            >
+              <span className="bg-[#5A42DE] size-10 rounded-xl flex justify-center items-center">
                 <WithdrawalIcon />
-              </div>
-              <p className="text-sm leading-5 text-[#18181B] whitespace-nowrap">Withdraw</p>
-            </div>
+              </span>
+              <span className="text-sm leading-5 text-[#18181B] whitespace-nowrap">
+                Withdraw
+              </span>
+            </button>
           </div>
         </div>
       </div>
@@ -73,6 +92,12 @@ export const AccountBalanceCard = () => {
           </div>
         </div>
       </div>
+
+      <WithdrawalSuccessModal
+        isOpen={isWithdrawalSuccessOpen}
+        amount={DEMO_WITHDRAWAL_AMOUNT}
+        onClose={() => setIsWithdrawalSuccessOpen(false)}
+      />
     </div>
   );
 };
