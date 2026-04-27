@@ -114,7 +114,7 @@ function Profile() {
       </div>
 
       {/* Sidebar */}
-      <div className="flex flex-col gap-4 w-full md:flex-row xl:max-w-86.25">
+      <div className="flex flex-col gap-4 w-full md:flex-row xl:max-w-86.25 xl:flex-col">
         <div>
           <GiftInfoCard />
         </div>
