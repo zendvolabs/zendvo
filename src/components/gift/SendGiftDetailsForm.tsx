@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import { Eye } from "lucide-react";
+import { clsx } from "clsx";
 import { PhoneInput } from "@/components/PhoneInput";
 import Button from "@/components/Button";
 import GiftPreviewModal from "@/components/gift/GiftPreviewModal";
@@ -362,15 +363,30 @@ export default function SendGiftDetailsForm({
             Preview recipient&apos;s view
           </button>
 
-          {/* Submit Button */}
-          <Button
-            onClick={handleContinue}
-            disabled={!isFormValid || isLoading}
-            isLoading={isLoading}
-            className="w-full h-12 mt-2 rounded-xl bg-[#5A42DE] hover:bg-[#4E37CC] text-white text-[15px] font-semibold transition-all duration-200 disabled:opacity-50"
-          >
-            Continue
-          </Button>
+          {/* Submit & Back Buttons */}
+          <div className="flex gap-3 mt-2">
+            {onBack && (
+              <Button
+                variant="outline"
+                onClick={onBack}
+                disabled={isLoading}
+                className="flex-1 h-12 rounded-xl text-[15px] font-semibold"
+              >
+                Back
+              </Button>
+            )}
+            <Button
+              onClick={handleContinue}
+              disabled={!isFormValid || isLoading}
+              isLoading={isLoading}
+              className={clsx(
+                "h-12 rounded-xl bg-[#5A42DE] hover:bg-[#4E37CC] text-white text-[15px] font-semibold transition-all duration-200 disabled:opacity-50",
+                onBack ? "flex-1" : "w-full"
+              )}
+            >
+              Continue
+            </Button>
+          </div>
 
           {/* Gift Preview Modal */}
           <GiftPreviewModal

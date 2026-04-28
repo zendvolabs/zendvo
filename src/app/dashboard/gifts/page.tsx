@@ -11,6 +11,7 @@ import SenderDetailsForm, {
 } from "@/components/gift/SenderDetailsForm";
 import ReviewGiftDetails from "@/components/gift/ReviewGiftDetails";
 import GiftSuccessModal from "@/components/gift/GiftSuccessModal";
+import CategoryGrid from "@/components/gifting/CategoryGrid";
 
 const CONTACTS: GiftContact[] = [
   {
@@ -54,7 +55,7 @@ const INITIAL_SENDER_VALUES: SenderDetailsValues = {
   imageName: "",
 };
 
-type FlowStep = "details" | "options" | "payment";
+type FlowStep = "category" | "details" | "options" | "payment";
 
 const formatUnlockLabel = (date: string, time: string): string => {
   if (!date && !time) return "-";
@@ -69,7 +70,8 @@ export default function DashboardGiftsPage() {
   const [senderValues, setSenderValues] = useState<SenderDetailsValues>(
     INITIAL_SENDER_VALUES,
   );
-  const [step, setStep] = useState<FlowStep>("details");
+  const [step, setStep] = useState<FlowStep>("category");
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isProceeding, setIsProceeding] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
 
@@ -86,21 +88,29 @@ export default function DashboardGiftsPage() {
     setIsSuccessModalOpen(true);
   };
 
+  const handleCategorySelect = (categoryId: string) => {
+    setSelectedCategory(categoryId);
+    setStep("details");
+  };
+
   const handleNext = () => {
-    if (step === "details") setStep("options");
+    if (step === "category") setStep("details");
+    else if (step === "details") setStep("options");
     else if (step === "options") setStep("payment");
   };
 
   const handleBack = () => {
-    if (step === "options") setStep("details");
+    if (step === "details") setStep("category");
+    else if (step === "options") setStep("details");
     else if (step === "payment") setStep("options");
   };
 
   const getCurrentStepIndex = () => {
     switch (step) {
-      case "details": return 0;
-      case "options": return 1;
-      case "payment": return 2;
+      case "category": return 0;
+      case "details": return 1;
+      case "options": return 2;
+      case "payment": return 3;
       default: return 0;
     }
   };
@@ -112,7 +122,7 @@ export default function DashboardGiftsPage() {
         <div className="px-6 pt-6">
           <div className="flex items-center justify-center mb-8">
             <div className="flex items-center space-x-4">
-              {[0, 1, 2].map((index) => (
+              {[0, 1, 2, 3].map((index) => (
                 <React.Fragment key={index}>
                   <div
                     className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
@@ -123,7 +133,7 @@ export default function DashboardGiftsPage() {
                   >
                     {index + 1}
                   </div>
-                  {index < 2 && (
+                  {index < 3 && (
                     <div
                       className={`w-12 h-1 transition-colors ${
                         index < getCurrentStepIndex()
@@ -139,11 +149,13 @@ export default function DashboardGiftsPage() {
           <div className="flex justify-center mb-6">
             <div className="text-center">
               <h2 className="text-lg font-semibold text-[#18181B]">
+                {step === "category" && "Select Category"}
                 {step === "details" && "Gift Details"}
                 {step === "options" && "Gift Options"}
                 {step === "payment" && "Payment"}
               </h2>
               <p className="text-sm text-[#717182] mt-1">
+                {step === "category" && "What is the occasion for this gift?"}
                 {step === "details" && "Enter recipient and amount details"}
                 {step === "options" && "Configure delivery and wrapper options"}
                 {step === "payment" && "Review and complete your gift"}
@@ -152,6 +164,14 @@ export default function DashboardGiftsPage() {
           </div>
         </div>
 
+        {step === "category" && (
+          <div className="flex justify-center px-4 pb-10">
+            <div className="w-full max-w-4xl">
+              <CategoryGrid onSelect={handleCategorySelect} />
+            </div>
+          </div>
+        )}
+
         {step === "details" ? (
           <SendGiftDetailsForm
             contacts={CONTACTS}
@@ -159,6 +179,7 @@ export default function DashboardGiftsPage() {
             value={giftValues}
             onChange={setGiftValues}
             onContinue={handleNext}
+            onBack={handleBack}
           />
         ) : null}
 
