@@ -19,6 +19,7 @@ export const NavBar = ({ onMenuToggle }: NavBarProps) => {
     "/dashboard/recipient": "Recipient",
     "/dashboard/gifts": "Send Gift",
     "/dashboard/wallet": "Wallet",
+    "/settings": "Settings",
   };
 
   const pageTitle = titleByRoute[pathname] || "Dashboard";
