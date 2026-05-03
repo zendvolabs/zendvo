@@ -1,58 +1,129 @@
 # Zendvo
-www.zendvo.com
 
-Zendvo is a full-stack gifting platform that enables users to send cash gifts that remain completely hidden until a predetermined unlock date and time. By using the Stellar blockchain, Zendvo transforms digital money transfers into memorable experiences filled with mystery and anticipation.
+<p align="center">
+  <img src="https://img.shields.io/badge/Next.js-16.x-black?style=for-the-badge&logo=next.js" alt="Next.js 16" />
+  <img src="https://img.shields.io/badge/TypeScript-5.x-blue?style=for-the-badge&logo=typescript" alt="TS 5" />
+  <img src="https://img.shields.io/badge/Drizzle-ORM-teal?style=for-the-badge&logo=drizzle" alt="Drizzle" />
+  <img src="https://img.shields.io/badge/Stellar-Soroban-black?style=for-the-badge&logo=stellar" alt="Stellar" />
+</p>
 
-## Who is Zendvo For?
+**Zendvo** is a full-stack gifting platform that transforms digital money transfers into memorable experiences. It enables users to send cash gifts that remain completely hidden and locked until a predetermined date and time, powered by Stellar Soroban smart contracts.
 
-- **Domestic Gifting:** Nigerians sending to Nigerians for birthdays, anniversaries, and holidays where surprise is key.
-- **Memorable Occasions:** Perfect for Valentine's Day, graduations, and surprise celebrations where the timing of the gift is as important as the gift itself.
+## Features
 
-## Architecture Highlights
+- **Decentralized Time-Locking**: Funds are securely locked in Soroban smart contracts and only unlockable after the specified time.
+- **Stablecoin Preservation**: Utilizes USDC to ensure the gift's value remains stable from creation to reveal.
+- **Bank Integration**: Seamless on/off-ramps connecting global stablecoin liquidity with local financial systems.
+- **Surprise Experience**: High-end UI/UX designed to build anticipation and mystery around digital gifts.
+- **Low-Cost Global Transfers**: Leveraging Stellar's high speed and near-zero fees for efficient gifting.
 
-Zendvo is built with a modern full-stack App Router architecture:
+## Stack
 
-- **Frontend:** Next.js with TypeScript and Vanilla CSS for a premium, fast, and responsive user experience.
-- **Backend:** Integrated Route Handlers in `src/app/api` and a dedicated `src/server` layer for heavy business logic and data access.
-- **Smart Escrow:** Powered by **Stellar Soroban** smart contracts to ensure trustless, time-locked fund management.
+- **Framework**: [Next.js 16](https://nextjs.org/) (App Router)
+- **Language**: [TypeScript 5](https://www.typescriptlang.org/)
+- **Database**: PostgreSQL with [Drizzle ORM](https://orm.drizzle.team/)
+- **Smart Contracts**: Stellar Soroban (Rust)
+- **Styling**: Vanilla CSS & Tailwind CSS 4
+- **Integrations**: Stellar SDK, Stripe, Paystack
+
+## Quick Start
+
+1. **Clone and Prepare**:
+
+   ```bash
+   git clone https://github.com/codeze-us/zendvo.git
+   cd zendvo
+   cp .env.example .env
+   ```
+
+2. **Install Dependencies**:
+
+   ```bash
+   npm install
+   ```
+
+3. **Database Setup**:
+
+   ```bash
+   npm run db:push
+   ```
+
+4. **Run in Development**:
+
+   ```bash
+   npm run dev
+   ```
 
 ## Project Structure
 
-```text
+```
 src/
-├── app/                  # Next.js App Router
-│   ├── (public)/         # Public pages (Landing, Gift Creation, Claim)
-│   ├── api/              # Backend Route Handlers
-│   ├── auth/             # Phone verification & Login
-│   ├── dashboard/        # Recipient and Sender dashboards
-│   └── ...               # Profile, Notifications, Help
-├── server/               # Backend Business Logic
-│   ├── services/         # Core logic (scheduling, processing)
-│   ├── data-access/      # DB & Blockchain API interactions
-│   ├── middleware/       # Security & Validation
-│   └── config/           # Server configurations
-├── components/           # UI Component Library
-├── lib/                  # Third-party integrations (Stellar, Stripe, Paystack)
-├── types/                # Global TypeScript definitions
-└── styles/               # Vanilla CSS Design System
+├── app/                  # Next.js App Router (Pages & API)
+├── server/               # Backend Business Logic & Services
+├── components/           # Modular UI Component Library
+├── lib/                  # Blockchain & Payment Integrations
+├── types/                # Global TypeScript Definitions
+└── styles/               # Design System & Styling
 ```
 
-## Benefits to the Stellar Ecosystem
+## Documentation
 
-Zendvo showcases the power of Stellar through:
+Comprehensive documentation for Zendvo:
 
-1.  **Stablecoin Infrastructure:** Utilizing **USDC** for value preservation, ensuring that the gift amount remains stable from creation to unlock.
-2.  **Soroban Smart Contracts:** Implementing decentralized time-locking logic that prevents early withdrawal, providing a middleman-free guarantee of the "hidden" nature of the gift.
-3.  **Low-Cost Transactions:** Leveraging Stellar's high speed and near-zero fees to ensure that more of the sender's money reaches the recipient.
-4.  **Real-World Utility:** Connecting blockchain technology directly to Nigerian bank accounts via local payout partners, driving adoption of Web3 solutions for real-world financial needs.
-5.  **Financial Inclusion:** Providing a good on/off-ramp experience that bridges global stablecoin liquidity with local financial systems.
+- [Documentation Index](./docs/README.md)
+- [Architecture Overview](./docs/architecture/overview.md)
+- [Project Vision](./docs/context/project-overview.md)
+- [Smart Contract Logic](./docs/blockchain/contracts.md)
 
-## Getting Started
+## Use Cases
 
-First, run the development server:
+### Surprise Birthdays
 
-```bash
-npm run dev
-```
+Send a cash gift weeks in advance that only unlocks at exactly 12:00 AM on the recipient's birthday, creating a perfect digital surprise.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Graduation Gifts
+
+Support a student's future by locking funds until their graduation date, ensuring the gift is used for the intended celebration.
+
+### Cross-Border Gifting
+
+Send stablecoins from anywhere in the world to Nigerian recipients with local bank payout support and time-locked reveal logic.
+
+## Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed guidelines.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
+
+## Support
+
+- **Issues**: [GitHub Issues](https://github.com/codeze-us/zendvo/issues)
+- **Website**: [www.zendvo.com](https://www.zendvo.com)
+
+## Maintainers
+
+<table align="center">
+  <tr>
+    <td align="center">
+      <img src="https://github.com/codeze-us.png" alt="codeZe-us" width="150" />
+      <br /><br />
+      <strong>codeZe-us</strong>
+      <br /><br />
+      <a href="https://github.com/codeze-us" target="_blank">GitHub</a>
+    </td>
+  </tr>
+</table>
+
+---
+
+## Thanks to all the contributors who have made this project possible!
+
+---
+
+<p align="center">
+  <i>Decentralizing the art of surprise on Stellar</i>
+</p>
+
+---
