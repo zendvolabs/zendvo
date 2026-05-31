@@ -1,8 +1,55 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { bankAccounts } from "@/lib/db/schema";
+import { eq, desc } from "drizzle-orm";
 import { getAuthPayload } from "@/lib/auth-session";
 import { addBankAccountSchema } from "@/lib/validations/bank";
+
+const maskAccountNumber = (accountNumber: string) =>
+  accountNumber.length > 4 ? `****${accountNumber.slice(-4)}` : "****";
+
+export async function GET(req: NextRequest) {
+  try {
+    const payload = await getAuthPayload(req);
+    if (!payload?.userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const accounts = await db.query.bankAccounts.findMany({
+      where: eq(bankAccounts.userId, payload.userId),
+      columns: {
+        id: true,
+        country: true,
+        currency: true,
+        swiftBic: true,
+        accountNumber: true,
+        createdAt: true,
+      },
+      orderBy: [desc(bankAccounts.createdAt)],
+    });
+
+    return NextResponse.json(
+      {
+        success: true,
+        bankAccounts: accounts.map((account) => ({
+          id: account.id,
+          country: account.country,
+          currency: account.currency,
+          swiftBic: account.swiftBic,
+          accountNumber: maskAccountNumber(account.accountNumber),
+          createdAt: account.createdAt,
+        })),
+      },
+      { status: 200 },
+    );
+  } catch (error) {
+    console.error("Error fetching bank accounts:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {

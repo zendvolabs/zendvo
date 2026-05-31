@@ -58,6 +58,7 @@
     "jest-regex-util": "^30.0.1",
     "ts-jest": "^29.4.6",
     "typescript": "^5.9.3",
+    "esbuild": "^0.28.0",
     "vitest": "^4.1.2"
   }
 }

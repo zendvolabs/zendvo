@@ -1,17 +1,23 @@
 name: PR Review & Quality
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
 
 jobs:
   labeler:
     name: Auto Labeler
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - name: Label PR
         uses: actions/labeler@v5
         with:
@@ -21,10 +27,11 @@ jobs:
   size-check:
     name: Size Assessment
     runs-on: ubuntu-latest
-    permissions:
-      issues: write
-      pull-requests: write
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - name: Size Labeling
         uses: pascalgn/size-label-action@v0.5.5
         env:
@@ -42,7 +49,7 @@ jobs:
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    if: false  # disabled until GitHub dependency graph/security analysis is enabled for this repository
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4

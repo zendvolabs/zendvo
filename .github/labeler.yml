@@ -1,24 +1,34 @@
 # Labels for PRs based on changed files
 
 frontend:
-  - "src/app/**/*"
-  - "src/components/**/*"
-  - "public/**/*"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/app/**/*"
+          - "src/components/**/*"
+          - "public/**/*"
 
 backend:
-  - "src/api/**/*"
-  - "src/lib/**/*"
-  - "src/server/**/*"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/api/**/*"
+          - "src/lib/**/*"
+          - "src/server/**/*"
 
 prisma:
-  - "prisma/**/*"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "prisma/**/*"
 
 documentation:
-  - "*.md"
-  - "swagger.yaml"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "*.md"
+          - "swagger.yaml"
 
 config:
-  - "*.json"
-  - "*.config.*"
-  - ".gitignore"
-  - ".github/**/*"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "*.json"
+          - "*.config.*"
+          - ".gitignore"
+          - ".github/**/*"
