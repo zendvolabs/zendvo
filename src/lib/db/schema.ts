@@ -28,6 +28,16 @@ export const giftStatusEnum = pgEnum("gift_status", [
   "sent",
   "failed",
 ]);
+export const transactionTypeEnum = pgEnum("transaction_type", [
+  "deposit",
+  "withdrawal",
+  "transfer",
+]);
+export const transactionStatusEnum = pgEnum("transaction_status", [
+  "pending",
+  "completed",
+  "failed",
+]);
 
 
 export const users = pgTable(
@@ -248,6 +258,32 @@ export const bankAccounts = pgTable(
   },
 );
 
+export const transactions = pgTable(
+  "transactions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    walletId: uuid("wallet_id").references(() => wallets.id),
+    type: transactionTypeEnum("type").notNull(),
+    status: transactionStatusEnum("status").default("pending").notNull(),
+    amount: doublePrecision("amount").notNull(),
+    currency: text("currency").notNull(),
+    reference: text("reference"),
+    provider: text("provider"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => {
+    return [
+      index("tx_user_id_idx").on(table.userId),
+      index("tx_wallet_id_idx").on(table.walletId),
+      index("tx_created_at_idx").on(table.createdAt),
+    ];
+  },
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   emailVerifications: many(emailVerifications),
   passwordResets: many(passwordResets),
@@ -257,6 +293,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   wallets: many(wallets),
   bankAccounts: many(bankAccounts),
   notifications: many(notifications),
+  transactions: many(transactions),
 }));
 
 export const giftsRelations = relations(gifts, ({ one }) => ({
@@ -296,10 +333,22 @@ export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
   }),
 }));
 
-export const walletsRelations = relations(wallets, ({ one }) => ({
+export const walletsRelations = relations(wallets, ({ one, many }) => ({
   user: one(users, {
     fields: [wallets.userId],
     references: [users.id],
+  }),
+  transactions: many(transactions),
+}));
+
+export const transactionsRelations = relations(transactions, ({ one }) => ({
+  user: one(users, {
+    fields: [transactions.userId],
+    references: [users.id],
+  }),
+  wallet: one(wallets, {
+    fields: [transactions.walletId],
+    references: [wallets.id],
   }),
 }));
 

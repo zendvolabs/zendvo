@@ -4,7 +4,7 @@ import Stripe from "stripe";
 export const stripe = new Stripe(
   process.env.STRIPE_SECRET_KEY || "sk_test_placeholder_for_build_step",
   {
-    apiVersion: "2026-01-28.clover",
+    apiVersion: "2026-02-25.clover",
   }
 );
 
@@ -90,4 +90,27 @@ export const verifyPayment = async (paymentIntentId: string) => {
 
 export const isPaymentSuccessful = (status: string): boolean => {
   return status === "succeeded";
+};
+
+export interface PayoutParams {
+  amount: number;
+  currency: string;
+  destinationAccountId?: string;
+}
+
+export const createPayout = async (params: PayoutParams) => {
+  const { amount, currency, destinationAccountId } = params;
+  
+  if (destinationAccountId) {
+    return await stripe.transfers.create({
+      amount: Math.round(amount * 100),
+      currency: currency.toLowerCase(),
+      destination: destinationAccountId,
+    });
+  }
+
+  return await stripe.payouts.create({
+    amount: Math.round(amount * 100),
+    currency: currency.toLowerCase(),
+  });
 };
