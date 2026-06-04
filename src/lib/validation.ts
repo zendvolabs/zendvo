@@ -186,4 +186,6 @@ export const CreateGiftSchema = z.object({
   template: z.string().optional().nullable(),
   coverImageId: z.union([z.string(), z.number()]).optional().nullable(),
   unlock_at: z.union([z.string(), z.date()]).optional().nullable(),
+  senderAvatar: z.string().refine((val) => !val || val.startsWith('http'), { message: "Invalid image URL" }).optional().nullable(),
+  recipientPhone: z.string().refine((val) => !val || validateE164PhoneNumber(val), { message: "Invalid phone number format" }).optional().nullable(),
 });

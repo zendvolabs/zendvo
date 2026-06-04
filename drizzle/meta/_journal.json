@@ -15,6 +15,13 @@
       "when": 1780262061192,
       "tag": "0001_dapper_darkhawk",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780557193754,
+      "tag": "0002_peaceful_tag",
+      "breakpoints": true
     }
   ]
 }

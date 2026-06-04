@@ -167,6 +167,7 @@ export const gifts = pgTable(
     senderName: text("sender_name"),
     senderEmail: text("sender_email"),
     senderAvatar: text("sender_avatar"),
+    recipientPhone: text("recipient_phone"),
     shareLink: text("share_link").unique(),
     shareLinkToken: text("share_link_token").unique(),
     slug: text("slug").unique(),

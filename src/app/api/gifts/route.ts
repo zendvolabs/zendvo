@@ -10,6 +10,7 @@ import {
   convertToUTCDate,
   formatAsUTCISO,
   CreateGiftSchema,
+  sanitizePhoneNumber,
 } from "@/lib/validation";
 import { generateOTP, storeGiftOTP } from "@/server/services/otpService";
 import { sendGiftConfirmationOTP } from "@/server/services/emailService";
@@ -76,6 +77,8 @@ export async function POST(request: NextRequest) {
       template,
       coverImageId,
       unlock_at,
+      senderAvatar,
+      recipientPhone,
     } = validationResult.data;
 
     
@@ -108,6 +111,8 @@ export async function POST(request: NextRequest) {
     const sanitizedCoverImageId = coverImageId
       ? sanitizeInput(String(coverImageId))
       : null;
+    const sanitizedSenderAvatar = senderAvatar ? sanitizeInput(senderAvatar) : null;
+    const sanitizedRecipientPhone = recipientPhone ? sanitizePhoneNumber(recipientPhone) : null;
 
     
     if (!validateMessage(sanitizedMessage)) {
@@ -149,6 +154,8 @@ export async function POST(request: NextRequest) {
         message: sanitizedMessage,
         template: sanitizedTemplate,
         coverImageId: sanitizedCoverImageId,
+        senderAvatar: sanitizedSenderAvatar,
+        recipientPhone: sanitizedRecipientPhone,
         unlockDatetime: unlock_at ? convertToUTCDate(unlock_at) : null,
         status: "pending_otp" as "pending_otp",
         slug,
