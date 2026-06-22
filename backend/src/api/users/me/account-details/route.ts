@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
         success: true,
         name: user.name,
         accountNumber: user.phoneNumber,
+        defaultCurrency: "USDT",
       },
       { status: 200 },
     );
