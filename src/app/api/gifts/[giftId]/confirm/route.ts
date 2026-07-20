@@ -90,6 +90,7 @@ export async function POST(
     }
 
     
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const giftData = gift as any;
     if (giftData.paymentReference && giftData.paymentProvider) {
       try {
@@ -131,6 +132,7 @@ export async function POST(
         
         await db
           .update(gifts)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           .set({ paymentVerifiedAt: new Date() } as any)
           .where(eq(gifts.id, giftId));
       } catch (error) {

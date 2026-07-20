@@ -46,9 +46,8 @@ function mockUpdate(returnedIds: string[]) {
   });
 }
 
-afterEach(() => jest.clearAllMocks());
-
 describe("POST /api/notifications/mark-read", () => {
+  afterEach(() => jest.clearAllMocks());
   test("returns 401 when unauthenticated", async () => {
     const res = await POST(makeRequest(undefined, null));
     expect(res.status).toBe(401);

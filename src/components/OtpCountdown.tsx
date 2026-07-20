@@ -41,6 +41,7 @@ export function OTPCountdown({
       timeLeft % announceInterval === 0; 
 
     if (shouldAnnounce) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLastAnnounced(timeLeft);
     }
   }, [timeLeft, announceInterval, duration]);

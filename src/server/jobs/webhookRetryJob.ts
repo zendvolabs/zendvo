@@ -16,6 +16,7 @@ const BATCH_SIZE = 10;
   `);
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function processQueueItem(item: any) {
   try {
     await processWebhookEvent(item.event_type, item.payload);
@@ -40,6 +41,7 @@ async function processWebhookEvent(eventType: string, payload: unknown) {
     }
   }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function scheduleRetry(item: any, error: unknown) {
   const retryCount = item.retry_count + 1;
 

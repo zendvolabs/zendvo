@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
         template: sanitizedTemplate,
         coverImageId: sanitizedCoverImageId,
         unlockDatetime: unlock_at ? convertToUTCDate(unlock_at) : null,
-        status: "pending_otp" as "pending_otp",
+        status: "pending_otp" as const,
         slug,
         shortCode,
         totalAmount: amount,

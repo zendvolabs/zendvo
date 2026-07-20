@@ -33,6 +33,7 @@ describe("Timezone-aware validation", () => {
     });
 
     it("should reject non-string/non-Date inputs", () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = validateUnlockAt(123 as any);
       expect(result.valid).toBe(false);
       expect(result.detail).toContain("ISO 8601 string or Date object");

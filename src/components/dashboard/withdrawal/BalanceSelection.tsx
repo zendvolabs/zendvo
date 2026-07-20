@@ -15,7 +15,7 @@ export const BalanceSelection = () => {
           <div className="text-left space-y-6">
           <h1 className="text-3xl font-bold text-[#18181B]">Withdraw your gift</h1>
           <p className="text-[#717182] text-base ">
-            Choose where you'd like your money sent.
+            Choose where you&rsquo;d like your money sent.
           </p>
         </div>
           <div className="space-y-6 ">

@@ -56,6 +56,7 @@ export async function POST(req: NextRequest) {
       event.type === "checkout.session.completed" ||
       event.type === "payment_intent.succeeded"
     ) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const sessionOrIntent = event.data.object as any;
       const giftId = sessionOrIntent.metadata?.giftId;
       const paymentIntentId =

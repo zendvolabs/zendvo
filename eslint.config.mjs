@@ -8,8 +8,10 @@ const eslintConfig = defineConfig([
   ...nextTs,
   
   globalIgnores([
-    ".next__tests__*.test.{js,jsx,ts,tsx}",
-    "**/*.spec.{js,jsx,ts,tsx}",
+    ".next/**",
+    "scratch/**",
+    "tmp/**",
+    "test-migration-check.js",
   ]),
   {
     ...jestPlugin.configs["flat/recommended"],

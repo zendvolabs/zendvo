@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
           template: sanitizedTemplate,
           coverImageId: sanitizedCoverImageId,
           unlockDatetime: utcUnlockDatetime,
-          status: "pending_otp" as "pending_otp", 
+          status: "pending_otp" as const,
           slug,
           shortCode,
           totalAmount: giftInput.amount,

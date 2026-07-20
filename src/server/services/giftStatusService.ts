@@ -71,6 +71,7 @@ export async function validateGiftStatusTransition(
 }
 
 async function validateBusinessRules(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   gift: any,
   targetStatus: GiftStatus,
   currentUserId?: string,
@@ -144,6 +145,7 @@ async function validateBusinessRules(
 export async function transitionGiftStatus(
   giftId: string,
   targetStatus: GiftStatus,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   metadata?: Record<string, any>,
 ): Promise<StatusTransitionResult> {
   const validation = await validateGiftStatusTransition(giftId, targetStatus);
@@ -153,6 +155,7 @@ export async function transitionGiftStatus(
   }
 
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updateData: any = { status: targetStatus };
 
     

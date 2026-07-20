@@ -52,7 +52,7 @@ class ErrorBoundary extends Component<Props, State> {
             
             <h1 className="text-2xl font-bold text-slate-900 mb-2 font-br-firma">Something went wrong</h1>
             <p className="text-slate-500 mb-8 leading-relaxed">
-              We encountered an unexpected error. Don't worry, your gifts are safe. Please try refreshing the page.
+              We encountered an unexpected error. Don&rsquo;t worry, your gifts are safe. Please try refreshing the page.
             </p>
 
             <div className="flex flex-col gap-3">

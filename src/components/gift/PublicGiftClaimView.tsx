@@ -216,7 +216,7 @@ export default function PublicGiftClaimView({
                 }}
                >
                  <p className="text-center font-medium text-slate-700 italic px-8">
-                   "{gift.message}"
+                    &ldquo;{gift.message}&rdquo;
                  </p>
                </ScratchReveal>
              </div>

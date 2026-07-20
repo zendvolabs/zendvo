@@ -1,5 +1,6 @@
-// Define the mock variable at the very top with var so it's hoisted
+// eslint-disable-next-line no-var
 var mockGenerate = jest.fn(() => "default_slug");
+// eslint-disable-next-line no-var
 var mockCustomAlphabet = jest.fn(() => mockGenerate);
 
 import { generateUniqueSlug } from "../../src/lib/slug";

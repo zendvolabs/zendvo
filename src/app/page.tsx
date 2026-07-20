@@ -181,7 +181,7 @@ export default function LandingPage() {
                 className="min-w-[350px] bg-white p-8 rounded-[40px] shadow-sm border border-slate-50 flex flex-col justify-between"
                 whileHover={{ scale: 1.02 }}
               >
-                <p className="text-[#717182] text-lg italic mb-6">"{t.text}"</p>
+                <p className="text-[#717182] text-lg italic mb-6">&ldquo;{t.text}&rdquo;</p>
                 <div>
                   <p className="font-bold text-slate-900">{t.name}</p>
                   <p className="text-sm text-[#5A42DE] font-medium">{t.role}</p>
