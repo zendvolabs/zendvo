@@ -8,10 +8,10 @@ const eslintConfig = defineConfig([
   ...nextTs,
   
   globalIgnores([
-    
     ".next__tests__*.test.{js,jsx,ts,tsx}",
-      "**/*.spec.{js,jsx,ts,tsx}",
-    ],
+    "**/*.spec.{js,jsx,ts,tsx}",
+  ]),
+  {
     ...jestPlugin.configs["flat/recommended"],
     rules: {
       ...jestPlugin.configs["flat/recommended"].rules,
