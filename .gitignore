@@ -51,3 +51,7 @@ next-env.d.ts
 .marscode
 .opencode
 
+# Rust / Soroban contracts
+contracts/stableroute-router/target/
+contracts/stableroute-router/test_snapshots/
+
