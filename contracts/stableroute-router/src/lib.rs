@@ -6,6 +6,8 @@
 #[cfg(test)]
 extern crate std;
 
+mod savings;
+
 use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, panic_with_error, symbol_short, Address,
@@ -222,11 +224,24 @@ pub enum DataKey {
     /// [`SavingsInfo`], persistent). Absent Ôåö no account exists for
     /// that address.
     SavingsAccount(Address),
+    /// Per-user savings record with strict principal / yield separation
+    /// (keyed by `Address`, value is [`UserSavings`], persistent). Quarantines
+    /// savings funds from gift escrow pools to prevent accounting collisions.
+    /// Absent Ôåö no savings record for that address.
+    UserSavingsRecord(Address),
     /// Global savings configuration (singleton, [`SavingsConfig`],
     /// persistent). Written once by `init_savings` and updated by
     /// `deposit_savings`, `accrue_yield`, `withdraw_savings`, and
     /// `set_yield_rate`. Absent Ôåö savings module not initialized.
     SavingsConfig,
+    /// Platform address with governance authority (singleton, `Address`,
+    /// persistent). Set by the admin via [`StableRouteRouter::update_platform`].
+    /// Absent Ôåö no platform configured. Used for protocol-level operations.
+    Platform,
+    /// Maintainer address with operational authority (singleton, `Address`,
+    /// persistent). Set by the admin via [`StableRouteRouter::update_maintainer`].
+    /// Absent Ôåö no maintainer configured. Used for day-to-day maintenance.
+    Maintainer,
 }
 
 /// Upper bound on the per-pair fee. 1 000 bps = 10 %. Tightening this
@@ -345,6 +360,30 @@ impl StableRouteRouter {
             .unwrap_or_else(|| panic_with_error!(env, RouterError::NotInitialized));
         admin.require_auth();
         admin
+    }
+
+    /// Load the platform address and require its auth.
+    #[allow(dead_code)]
+    fn require_platform(env: &Env) -> Address {
+        let platform: Address = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Platform)
+            .unwrap_or_else(|| panic_with_error!(env, RouterError::NotInitialized));
+        platform.require_auth();
+        platform
+    }
+
+    /// Load the maintainer address and require its auth.
+    #[allow(dead_code)]
+    fn require_maintainer(env: &Env) -> Address {
+        let maintainer: Address = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Maintainer)
+            .unwrap_or_else(|| panic_with_error!(env, RouterError::NotInitialized));
+        maintainer.require_auth();
+        maintainer
     }
 
     /// Require that `(source, destination)` was previously registered via
@@ -625,6 +664,64 @@ impl StableRouteRouter {
     /// Returns the admin set at `init`, if any.
     pub fn get_admin(env: Env) -> Option<Address> {
         env.storage().persistent().get(&DataKey::Admin)
+    }
+
+    /// Read the configured platform address, if any.
+    pub fn get_platform(env: Env) -> Option<Address> {
+        env.storage().persistent().get(&DataKey::Platform)
+    }
+
+    /// Read the configured maintainer address, if any.
+    pub fn get_maintainer(env: Env) -> Option<Address> {
+        env.storage().persistent().get(&DataKey::Maintainer)
+    }
+
+    /// Emergency direct admin transfer. Admin-gated. Changes the stored admin
+    /// address immediately without going through the two-step handover. Emits
+    /// an `ad_trans` event carrying the new admin.
+    ///
+    /// This is the recovery path if the admin key is lost or compromised:
+    /// the current admin (which is still accessible) can rotate to a fresh
+    /// key in a single call. Use the two-step
+    /// `propose_admin_transfer`/`accept_admin_transfer` flow for planned
+    /// handovers.
+    pub fn transfer_admin(env: Env, new_admin: Address) {
+        Self::require_admin(&env);
+        env.storage().persistent().set(&DataKey::Admin, &new_admin);
+        env.events()
+            .publish((symbol_short!("ad_trans"),), new_admin);
+    }
+
+    /// Set (or rotate) the platform address. Admin-gated. Changes the stored
+    /// platform address immediately. Emits a `plat_upd` event carrying the new
+    /// platform address.
+    ///
+    /// The platform address is intended for protocol-level governance authority.
+    /// After rotation, `require_platform` immediately reflects the new address
+    /// and the old key is rejected.
+    pub fn update_platform(env: Env, new_platform: Address) {
+        Self::require_admin(&env);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Platform, &new_platform);
+        env.events()
+            .publish((symbol_short!("plat_upd"),), new_platform);
+    }
+
+    /// Set (or rotate) the maintainer address. Admin-gated. Changes the stored
+    /// maintainer address immediately. Emits a `mnt_upd` event carrying the new
+    /// maintainer address.
+    ///
+    /// The maintainer address is intended for day-to-day operational authority.
+    /// After rotation, `require_maintainer` immediately reflects the new address
+    /// and the old key is rejected.
+    pub fn update_maintainer(env: Env, new_maintainer: Address) {
+        Self::require_admin(&env);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Maintainer, &new_maintainer);
+        env.events()
+            .publish((symbol_short!("mnt_upd"),), new_maintainer);
     }
 
     /// Register `(source, destination)` as a recognised route.
@@ -4096,6 +4193,30 @@ mod test_i19_authorization {
         client.set_pair_fees_bps(&entries);
     }
 
+    #[test]
+    #[should_panic]
+    fn test_transfer_admin_requires_admin() {
+        let env = Env::default();
+        let client = setup_scoped(&env);
+        client.transfer_admin(&Address::generate(&env));
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_update_platform_requires_admin() {
+        let env = Env::default();
+        let client = setup_scoped(&env);
+        client.update_platform(&Address::generate(&env));
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_update_maintainer_requires_admin() {
+        let env = Env::default();
+        let client = setup_scoped(&env);
+        client.update_maintainer(&Address::generate(&env));
+    }
+
     /// Positive control: with the admin's auth supplied, the call succeeds.
     #[test]
     fn test_admin_can_register_with_auth() {
@@ -4673,6 +4794,34 @@ mod test_i153_version_uninitialized {
         client.upgrade(&dummy_hash);
     }
 
+    /// `transfer_admin()` panics with `NotInitialized` (#2) when called on an uninitialized contract.
+    #[test]
+    #[should_panic(expected = "Error(Contract, #2)")]
+    fn test_transfer_admin_panics_on_uninitialized_contract() {
+        let env = Env::default();
+        let client = setup_uninitialized(&env);
+        let new_admin = Address::generate(&env);
+        client.transfer_admin(&new_admin);
+    }
+
+    /// `update_platform()` panics with `NotInitialized` (#2) when called on an uninitialized contract.
+    #[test]
+    #[should_panic(expected = "Error(Contract, #2)")]
+    fn test_update_platform_panics_on_uninitialized_contract() {
+        let env = Env::default();
+        let client = setup_uninitialized(&env);
+        client.update_platform(&Address::generate(&env));
+    }
+
+    /// `update_maintainer()` panics with `NotInitialized` (#2) when called on an uninitialized contract.
+    #[test]
+    #[should_panic(expected = "Error(Contract, #2)")]
+    fn test_update_maintainer_panics_on_uninitialized_contract() {
+        let env = Env::default();
+        let client = setup_uninitialized(&env);
+        client.update_maintainer(&Address::generate(&env));
+    }
+
     // ========== Security Invariant Validation ==========
 
     /// All read-only entrypoints (version, schema_version, pair queries) succeed on
@@ -4693,6 +4842,8 @@ mod test_i153_version_uninitialized {
         assert_eq!(client.get_fee_recipient(), None);
         assert_eq!(client.get_oracle(), None);
         assert_eq!(client.get_max_fee_absolute(), None);
+        assert_eq!(client.get_platform(), None);
+        assert_eq!(client.get_maintainer(), None);
         assert!(!client.is_pair_registered(&symbol_short!("USDC"), &symbol_short!("EURC")));
         assert_eq!(
             client.get_pair_fee_bps(&symbol_short!("USDC"), &symbol_short!("EURC")),
@@ -5581,5 +5732,246 @@ mod test_i165_cooldown_rate_limit {
         let yield_t2 = client.get_savings_info(&user).unwrap().yield_earned;
 
         assert!(yield_t2 > yield_t1, "yield should be strictly monotonic");
+    }
+}
+
+/// Role rotation tests: transfer_admin, update_platform, update_maintainer.
+///
+/// Covers:
+/// - Happy-path rotation for all three addresses
+/// - Event emission verification
+/// - Non-admin caller rejection for all three methods
+/// - After rotation the old key is rejected and the new key is accepted
+#[cfg(test)]
+mod test_rotation {
+    use super::*;
+    use soroban_sdk::{
+        symbol_short,
+        testutils::{Address as _, MockAuth, MockAuthInvoke},
+        IntoVal,
+    };
+
+    fn setup(env: &Env) -> (StableRouteRouterClient<'_>, Address) {
+        env.mock_all_auths();
+        let admin = Address::generate(env);
+        let id = env.register(StableRouteRouter, (admin.clone(),));
+        let client = StableRouteRouterClient::new(env, &id);
+        (client, admin)
+    }
+
+    // --- transfer_admin ---
+
+    #[test]
+    fn test_transfer_admin_changes_admin_and_emits_event() {
+        let env = Env::default();
+        let (client, admin) = setup(&env);
+        let next_admin = Address::generate(&env);
+
+        assert_eq!(client.get_admin(), Some(admin.clone()));
+
+        // Admin transfers to next_admin.
+        client.transfer_admin(&next_admin);
+
+        assert_eq!(client.get_admin(), Some(next_admin.clone()));
+
+        // Verify event: ad_trans carrying the new admin.
+        let payloads = crate::test::event_payloads(&env, symbol_short!("ad_trans"));
+        assert_eq!(payloads.len(), 1);
+        let event_admin: Address = soroban_sdk::TryFromVal::try_from_val(&env, &payloads[0])
+            .expect("ad_trans event data decodes to Address");
+        assert_eq!(event_admin, next_admin);
+    }
+
+    /// Old admin key is rejected after rotation (fails require_auth because the
+    /// stored admin is now next_admin, not old admin).
+    #[test]
+    fn test_transfer_admin_old_admin_rejected_after_rotation() {
+        let env = Env::default();
+        let admin = Address::generate(&env);
+        let next_admin = Address::generate(&env);
+
+        // Deploy with admin, authorize only the constructor call.
+        let id = Address::generate(&env);
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &id,
+                fn_name: "__constructor",
+                args: (admin.clone(),).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        env.register_at(&id, StableRouteRouter, (admin.clone(),));
+        let client = StableRouteRouterClient::new(&env, &id);
+
+        // Authorize admin for transfer_admin call.
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &id,
+                fn_name: "transfer_admin",
+                args: (next_admin.clone(),).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client.transfer_admin(&next_admin);
+
+        // Old admin is now rejected for admin-gated calls.
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &id,
+                fn_name: "pause",
+                args: ().into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            client.pause();
+        }));
+        assert!(
+            result.is_err(),
+            "old admin should be rejected after transfer"
+        );
+    }
+
+    #[test]
+    fn test_transfer_admin_rejects_non_admin() {
+        let env = Env::default();
+        let (client, _admin) = setup(&env);
+        let attacker = Address::generate(&env);
+        let target = Address::generate(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &attacker,
+            invoke: &MockAuthInvoke {
+                contract: &client.address,
+                fn_name: "transfer_admin",
+                args: (target.clone(),).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            client.transfer_admin(&target);
+        }));
+        assert!(result.is_err(), "non-admin should be rejected");
+    }
+
+    // --- update_platform ---
+
+    #[test]
+    fn test_update_platform_sets_address_and_emits_event() {
+        let env = Env::default();
+        let (client, _admin) = setup(&env);
+        let platform = Address::generate(&env);
+
+        // Platform should be None initially.
+        assert_eq!(client.get_platform(), None);
+
+        client.update_platform(&platform);
+
+        assert_eq!(client.get_platform(), Some(platform.clone()));
+
+        // Verify event: plat_upd carrying the new platform.
+        let payloads = crate::test::event_payloads(&env, symbol_short!("plat_upd"));
+        assert_eq!(payloads.len(), 1);
+        let event_platform: Address = soroban_sdk::TryFromVal::try_from_val(&env, &payloads[0])
+            .expect("plat_upd event data decodes to Address");
+        assert_eq!(event_platform, platform);
+    }
+
+    #[test]
+    fn test_update_platform_can_rotate() {
+        let env = Env::default();
+        let (client, _admin) = setup(&env);
+        let platform_a = Address::generate(&env);
+        let platform_b = Address::generate(&env);
+
+        client.update_platform(&platform_a);
+        assert_eq!(client.get_platform(), Some(platform_a.clone()));
+
+        client.update_platform(&platform_b);
+        assert_eq!(client.get_platform(), Some(platform_b));
+    }
+
+    #[test]
+    fn test_update_platform_rejects_non_admin() {
+        let env = Env::default();
+        let (client, _admin) = setup(&env);
+        let attacker = Address::generate(&env);
+        let platform = Address::generate(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &attacker,
+            invoke: &MockAuthInvoke {
+                contract: &client.address,
+                fn_name: "update_platform",
+                args: (platform.clone(),).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            client.update_platform(&platform);
+        }));
+        assert!(result.is_err(), "non-admin should be rejected");
+    }
+
+    // --- update_maintainer ---
+
+    #[test]
+    fn test_update_maintainer_sets_address_and_emits_event() {
+        let env = Env::default();
+        let (client, _admin) = setup(&env);
+        let maintainer = Address::generate(&env);
+
+        // Maintainer should be None initially.
+        assert_eq!(client.get_maintainer(), None);
+
+        client.update_maintainer(&maintainer);
+
+        assert_eq!(client.get_maintainer(), Some(maintainer.clone()));
+
+        // Verify event: mnt_upd carrying the new maintainer.
+        let payloads = crate::test::event_payloads(&env, symbol_short!("mnt_upd"));
+        assert_eq!(payloads.len(), 1);
+        let event_maintainer: Address = soroban_sdk::TryFromVal::try_from_val(&env, &payloads[0])
+            .expect("mnt_upd event data decodes to Address");
+        assert_eq!(event_maintainer, maintainer);
+    }
+
+    #[test]
+    fn test_update_maintainer_can_rotate() {
+        let env = Env::default();
+        let (client, _admin) = setup(&env);
+        let maintainer_a = Address::generate(&env);
+        let maintainer_b = Address::generate(&env);
+
+        client.update_maintainer(&maintainer_a);
+        assert_eq!(client.get_maintainer(), Some(maintainer_a.clone()));
+
+        client.update_maintainer(&maintainer_b);
+        assert_eq!(client.get_maintainer(), Some(maintainer_b));
+    }
+
+    #[test]
+    fn test_update_maintainer_rejects_non_admin() {
+        let env = Env::default();
+        let (client, _admin) = setup(&env);
+        let attacker = Address::generate(&env);
+        let maintainer = Address::generate(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &attacker,
+            invoke: &MockAuthInvoke {
+                contract: &client.address,
+                fn_name: "update_maintainer",
+                args: (maintainer.clone(),).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            client.update_maintainer(&maintainer);
+        }));
+        assert!(result.is_err(), "non-admin should be rejected");
     }
 }
