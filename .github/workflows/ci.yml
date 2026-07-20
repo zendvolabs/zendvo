@@ -2,9 +2,9 @@ name: CI/CD Workflow
 
 on:
   push:
-    branches: [main, master, develop]
+    branches: [main, master, develop, dev]
   pull_request:
-    branches: [main, master, develop]
+    branches: [main, master, develop, dev]
 
 jobs:
   build-and-test:
