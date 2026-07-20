@@ -1,4 +1,4 @@
-﻿# StableRoute ÔÇö Storage Model & DataKey Reference
+# StableRoute ÔÇö Storage Model & DataKey Reference
 
 ## Savings module overview
 

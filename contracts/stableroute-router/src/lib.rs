@@ -1,4 +1,4 @@
-﻿#![allow(deprecated)] // TODO: migrate Soroban events to #[contractevent].
+#![allow(deprecated)] // TODO: migrate Soroban events to #[contractevent].
 #![no_std]
 // Contributing? See CONTRIBUTING.md for error-numbering, event-topic, auth,
 // pause, and storage/TTL conventions plus the PR checklist.

@@ -1,4 +1,4 @@
-﻿# Contributing to stableroute-contracts
+# Contributing to stableroute-contracts
 
 Thanks for contributing to the StableRoute Soroban contracts. This guide
 documents the conventions the `StableRouteRouter` contract relies on. Every

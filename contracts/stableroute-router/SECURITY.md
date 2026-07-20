@@ -1,4 +1,4 @@
-﻿# Security Policy
+# Security Policy
 
 This document describes the trust model, known limitations, and
 responsible-disclosure process for the **StableRoute router**

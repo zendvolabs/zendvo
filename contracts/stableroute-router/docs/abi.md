@@ -1,4 +1,4 @@
-﻿# StableRoute Router ÔÇö Entrypoint & Event Reference
+# StableRoute Router ÔÇö Entrypoint & Event Reference
 
 Authoritative on-chain ABI for `StableRouteRouter` ([`src/lib.rs`](../src/lib.rs)).
 Every public entrypoint and emitted event is listed below, grouped by
