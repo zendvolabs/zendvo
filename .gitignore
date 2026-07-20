@@ -55,3 +55,8 @@ next-env.d.ts
 contracts/stableroute-router/target/
 contracts/stableroute-router/test_snapshots/
 
+# Root-level Rust build artifacts (workspace default)
+target/
+.cargo/
+test_snapshots/
+
