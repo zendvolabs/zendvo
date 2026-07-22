@@ -1,12 +1,13 @@
 use soroban_sdk::{contracttype, Address};
 
 #[contracttype]
-pub struct UserSavings {
-    pub principal: i128,
-    pub yield_shares: i128,
+pub enum DataKey {
+    UserSavingsRecord(Address),
+    TokenAddress,
 }
 
 #[contracttype]
-pub enum DataKey {
-    UserSavingsRecord(Address),
+pub struct UserSavings {
+    pub principal: i128,
+    pub yield_shares: i128,
 }
