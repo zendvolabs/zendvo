@@ -51,6 +51,7 @@ import { POST as actionOtpPost } from "./api/auth/action-otp/route";
 import { POST as authPost } from "./api/auth/route";
 // Wallet
 import { GET as walletTransactionsGet } from "./api/wallet/transactions/route";
+import { POST as activateWalletPost } from "./api/wallet/activate";
 // Dashboard
 import { GET as dashboardStatsGet } from "./api/dashboard/stats/route";
 import { POST as giftsMetadataPost } from "./api/gifts/metadata/route";
@@ -143,3 +144,6 @@ apiRouter.post("/api/gifts/appreciate", makeExpressHandler(giftAppreciatePost));
 // 4. Users routes
 apiRouter.get("/api/users/resolve", makeExpressHandler(resolveRecipientGet));
 apiRouter.delete("/api/users/account", makeExpressHandler(deleteAccountDelete));
+
+// 5. Wallet routes
+apiRouter.post("/api/wallet/activate", makeExpressHandler(activateWalletPost));
