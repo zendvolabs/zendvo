@@ -36,6 +36,13 @@
       "when": 1784989863483,
       "tag": "0004_secure_bank_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787331600000,
+      "tag": "0006_transaction_verification",
+      "breakpoints": true
     }
   ]
 }

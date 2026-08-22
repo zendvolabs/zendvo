@@ -1,5 +1,6 @@
+/** Runs startup checks and registers backend background jobs. */
 export async function register() {
-  if (process.env.NEXT_RUNTIME === "nodejs") {
+  if (process.env.NEXT_RUNTIME !== "edge") {
     const { checkMigrationStatus } = await import("./lib/db/migration-checker");
 
     console.log("🔍 Checking database migration status...");
@@ -37,9 +38,14 @@ export async function register() {
     try {
       console.log("⏰ Initializing background task schedulers...");
       const { startGiftReleaseJob } = await import("./server/jobs/giftReleaseJob");
+      const { runTransactionVerifierCron } = await import(
+        "./jobs/transaction_verifier"
+      );
       
       startGiftReleaseJob();
+      runTransactionVerifierCron();
       console.log("🚀 Scheduled Gift Release Cron Job successfully running.");
+      console.log("🚀 Scheduled Transaction Verifier Cron Job successfully running.");
     } catch (cronError) {
       console.error("❌ Failed to initialize background cron jobs:", cronError);
     }

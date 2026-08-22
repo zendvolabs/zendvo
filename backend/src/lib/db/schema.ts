@@ -309,6 +309,7 @@ export const transactions = pgTable(
     currency: text("currency").notNull(),
     reference: text("reference"),
     provider: text("provider"),
+    blockchainTxHash: text("blockchain_tx_hash"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -316,6 +317,7 @@ export const transactions = pgTable(
     index("tx_user_id_idx").on(table.userId),
     index("tx_wallet_id_idx").on(table.walletId),
     index("tx_created_at_idx").on(table.createdAt),
+    index("tx_blockchain_tx_hash_idx").on(table.blockchainTxHash),
   ],
 );
 
