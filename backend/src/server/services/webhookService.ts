@@ -1,11 +1,11 @@
 import { db } from "@/lib/db";
 import {
   transactions,
-  wallets,
   notifications,
   webhookRetryQueue,
 } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
+import { SavingsService } from "./savingsService";
 
 /**
  * SEP-24 transaction status values as defined in the specification.
@@ -144,13 +144,25 @@ async function findTransactionByAnchorId(anchorTxId: string) {
 }
 
 /**
- * Processes a SEP-24 webhook callback and updates internal state.
+ * Processes a SEP-24 webhook callback and updates internal state within an ACID transaction.
  *
  * Steps:
  * 1. Find the matching internal transaction by anchor transaction ID
  * 2. Update the transaction status
- * 3. Update the wallet balance for completed deposits
- * 4. Create a notification for the user
+ * 3. For completed deposits:
+ *    - Lock the user's ledger status for consistency
+ *    - Insert a savings history entry
+ *    - Update the wallet balance
+ *    - Update the user's cached savings balance
+ * 4. For completed withdrawals:
+ *    - Lock the user's ledger status for consistency
+ *    - Insert a savings history entry
+ *    - Update the wallet balance
+ *    - Update the user's cached savings balance
+ * 5. Create a notification for the user
+ *
+ * All operations are wrapped in a single database transaction to ensure
+ * ACID properties and prevent race conditions or partial writes.
  */
 export async function processSep24Webhook(
   payload: Sep24TransactionPayload,
@@ -186,99 +198,67 @@ export async function processSep24Webhook(
 
   const newStatus = mapSep24StatusToInternal(status);
 
-  // Update the transaction status
-  await db
-    .update(transactions)
-    .set({ status: newStatus })
-    .where(eq(transactions.id, internalTx.id));
+  try {
+    // Wrap all database operations in a transaction to ensure ACID properties
+    await db.transaction(async (tx) => {
+      // 1. Update the transaction status
+      await tx
+        .update(transactions)
+        .set({ status: newStatus })
+        .where(eq(transactions.id, internalTx.id));
 
-  // For completed deposits, credit the user's wallet
-  if (status === "completed" && kind === "deposit" && amount_in) {
-    const amount = parseFloat(amount_in);
-    if (!isNaN(amount) && amount > 0) {
-      await creditWallet(internalTx.userId, asset_code, amount);
-    }
-  }
+      // 2. For completed deposits, record in savings history and credit wallet
+      if (status === "completed" && kind === "deposit" && amount_in) {
+        const amount = parseFloat(amount_in);
+        if (!isNaN(amount) && amount > 0) {
+          const result = await SavingsService.recordDeposit(
+            tx,
+            internalTx.userId,
+            amount,
+            asset_code,
+            anchorTxId,
+          );
+          if (!result.success) {
+            throw new Error(result.error || "Failed to record deposit");
+          }
+        }
+      }
 
-  // For completed withdrawals, debit the user's wallet
-  if (status === "completed" && kind === "withdrawal" && amount_in) {
-    const amount = parseFloat(amount_in);
-    if (!isNaN(amount) && amount > 0) {
-      await debitWallet(internalTx.userId, asset_code, amount);
-    }
-  }
+      // 3. For completed withdrawals, record in savings history and debit wallet
+      if (status === "completed" && kind === "withdrawal" && amount_in) {
+        const amount = parseFloat(amount_in);
+        if (!isNaN(amount) && amount > 0) {
+          const result = await SavingsService.recordWithdrawal(
+            tx,
+            internalTx.userId,
+            amount,
+            asset_code,
+            anchorTxId,
+          );
+          if (!result.success) {
+            throw new Error(result.error || "Failed to record withdrawal");
+          }
+        }
+      }
 
-  // Create a notification for the user
-  const { title, message } = buildNotification(kind, status, asset_code, amount_in);
-  await db.insert(notifications).values({
-    userId: internalTx.userId,
-    type: `sep24_${kind}_${status}`,
-    title,
-    message,
-  });
-
-  return { processed: true };
-}
-
-/**
- * Credits a user's wallet with the specified amount of an asset.
- */
-async function creditWallet(
-  userId: string,
-  currency: string,
-  amount: number,
-): Promise<void> {
-  const existingWallet = await db
-    .select()
-    .from(wallets)
-    .where(and(eq(wallets.userId, userId), eq(wallets.currency, currency)))
-    .limit(1);
-
-  if (existingWallet.length > 0) {
-    const current = existingWallet[0];
-    await db
-      .update(wallets)
-      .set({
-        balance: (Number(current.balance) || 0) + amount,
-        updatedAt: new Date(),
-      })
-      .where(eq(wallets.id, current.id));
-  } else {
-    await db.insert(wallets).values({
-      userId,
-      currency,
-      balance: amount,
+      // 4. Create a notification for the user
+      const { title, message } = buildNotification(kind, status, asset_code, amount_in);
+      await tx.insert(notifications).values({
+        userId: internalTx.userId,
+        type: `sep24_${kind}_${status}`,
+        title,
+        message,
+      });
     });
-  }
-}
 
-/**
- * Debits a user's wallet for the specified amount of an asset.
- */
-async function debitWallet(
-  userId: string,
-  currency: string,
-  amount: number,
-): Promise<void> {
-  const existingWallet = await db
-    .select()
-    .from(wallets)
-    .where(and(eq(wallets.userId, userId), eq(wallets.currency, currency)))
-    .limit(1);
-
-  if (existingWallet.length > 0) {
-    const current = existingWallet[0];
-    const newBalance = (Number(current.balance) || 0) - amount;
-    await db
-      .update(wallets)
-      .set({
-        balance: newBalance,
-        updatedAt: new Date(),
-      })
-      .where(eq(wallets.id, current.id));
+    return { processed: true };
+  } catch (error) {
+    console.error("[SEP24_WEBHOOK_TRANSACTION_ERROR]", error);
+    return {
+      processed: false,
+      error: error instanceof Error ? error.message : "Transaction processing failed",
+    };
   }
-  // If wallet doesn't exist, the debit is a no-op (insufficient funds scenario
-  // should be handled upstream)
 }
 
 /**
