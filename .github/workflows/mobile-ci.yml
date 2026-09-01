@@ -1,14 +1,13 @@
 name: Mobile CI
-
 on:
   push:
     branches: [main, master, develop]
     paths:
-      - 'mobile/**'
+      - 'mobile/*'
   pull_request:
     branches: [main, master, develop]
     paths:
-      - 'mobile/**'
+      - 'mobile/*'
 
 jobs:
   build-and-test:
@@ -20,10 +19,10 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@v3
         with:
           channel: 'stable'
 
