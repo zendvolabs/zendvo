@@ -1,5 +1,4 @@
-name: Mobile CI
-on:
+name: Mobile CI\on:
   push:
     branches: [main, master, develop]
     paths:
@@ -33,7 +32,7 @@ jobs:
         run: flutter analyze
 
       - name: Run Tests
-        run: flutter test || echo "No tests found or tests failed"
+        run: flutter test
 
       - name: Build APK (Debug)
         run: flutter build apk --debug
