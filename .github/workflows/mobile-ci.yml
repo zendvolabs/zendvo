@@ -1,4 +1,5 @@
-name: Mobile CI\on:
+name: Mobile CI
+on:
   push:
     branches: [main, master, develop]
     paths:
@@ -18,7 +19,7 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v3
