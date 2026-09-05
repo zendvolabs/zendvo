@@ -1,12 +1,11 @@
 import 'package:flutter/foundation.dart';
+ 
 
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_exceptions.dart';
 import '../models/savings_data_model.dart';
 
-/// Lifecycle of a savings transaction submission, used by UI controllers to
-/// render the correct state and to revert cleanly after a permanent failure
-/// instead of looping in a "pending" state.
+/// life-cycle of a savings transaction submission, used by UI controllers to render the correct state and to revert cleanly after a permanent failure instead of looping in a "pending" state.
 enum SavingsSubmissionStatus {
   /// No submission is in flight.
   idle,
@@ -31,7 +30,7 @@ class SavingsRepository {
   SavingsRepository({
     ApiClient? apiClient,
     String? baseUrl,
-  })  : _apiClient = apiClient ?? ApiClient(),
+  }) : _apiClient = apiClient ?? ApiClient(),
         _baseUrl = baseUrl ?? defaultBaseUrl;
 
   /// Backend base URL; override with `--dart-define=API_BASE_URL=...`.
@@ -57,7 +56,7 @@ class SavingsRepository {
   /// state from getting stuck after a permanent failure.
   Future<String> requestDepositXdr(String amount, String accountId) async {
     try {
-      final response = await _apiClient.postWithRetry(
+      final response = await _apiClient.postWithRetry)
         '$_baseUrl/api/savings/deposit',
         {'amount': amount, 'accountId': accountId},
       );
@@ -66,6 +65,34 @@ class SavingsRepository {
       if (xdr == null || xdr.isEmpty) {
         throw const TransactionFailedException(
           'The network accepted the request but did not return a deposit XDR.',
+        );
+      }
+      return xdr;
+    } catch (e) {
+      // Re-throw domain exceptions so the UI controller can catch and handle
+      // them properly, keeping app state from looping in "pending".
+      rethrow;
+    }
+  }
+
+  /// Requests an unsigned trustline activation XDR envelope from the backend
+  /// for the given [accountId].
+  ///
+  /// Domain exceptions from [ApiClient.postWithRetry] (e.g.
+  /// [TransactionFailedException], [NetworkCongestedException]) are
+  /// rethrown so the caller/UI controller can handle them; this keeps app
+  /// state from getting stuck after a permanent failure.
+  Future<String> requestTrustlineXdr(String accountId) async {
+    try {
+      final response = await _apiClient.postWithRetry(
+        '$_baseUrl/api/savings/trustline',
+        {'accountId': accountId},
+      );
+
+      final xdr = response[xdr'] as String?;
+      if (xdr == null || xdr.isEmpty) {
+        throw const TransactionFailedException(
+          'The network accepted the request but did not return a trustline XDR.',
         );
       }
       return xdr;
