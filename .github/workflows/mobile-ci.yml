@@ -3,11 +3,13 @@ on:
   push:
     branches: [main, master, develop]
     paths:
-      - 'mobile/*'
+      - 'mobile/**'
+      - '.github/workflows/mobile-ci.yml'
   pull_request:
     branches: [main, master, develop]
     paths:
-      - 'mobile/*'
+      - 'mobile/**'
+      - '.github/workflows/mobile-ci.yml'
 
 jobs:
   build-and-test:
