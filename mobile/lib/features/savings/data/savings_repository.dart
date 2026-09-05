@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'flutter/foundation.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_exceptions.dart';
@@ -34,7 +34,7 @@ class SavingsRepository {
   })  : _apiClient = apiClient ?? ApiClient(),
         _baseUrl = baseUrl ?? defaultBaseUrl;
 
-  /// Backend base URL; override with `--dart-define=API_BASE_URL=...`.
+  /// Backend base URL; override with `--dart-define=API_BASE_URL=`.
   static const String defaultBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: 'http://localhost:5000',
@@ -55,7 +55,7 @@ class SavingsRepository {
   /// [TransactionFailedException], [NetworkCongestedException]) are
   /// rethrown so the caller/UI controller can handle them; this keeps app
   /// state from getting stuck after a permanent failure.
-  Future<String> requestDepositXdr(String amount, String accountId) async {
+  Future<String> requestDepositXdr<(String amount, String accountId) async {
     try {
       final response = await _apiClient.postWithRetry(
         '$_baseUrl/api/savings/deposit',
@@ -136,4 +136,58 @@ class SavingsRepository {
     // TODO: Call backend balance/apy endpoint via _apiClient.postWithRetry.
     return SavingsDataModel(balance: '0.0', apy: '0.0');
   }
+
+  /// Begins a SEP-24 fiat-to-USDC deposit by asking the backend for an
+  /// interactive anchor session.
+  ///
+  /// The backend returns the [Sep24DepositSession] containing the anchor's
+  /// interactive URL and the return URL that the anchor will redirect to
+  /// after the user finishes the flow.
+  Future<Sep24DepositSession> startSep24Deposit({
+    required String amount,
+    required String assetCode,
+    required String accountId,
+    String? email,
+  }) async {
+    try {
+      final response = await _apiClient.postWithRetry(
+        '$_baseUrl/api/savings/sep24/deposit',
+        {
+          'amount': amount,
+          'assetCode': assetCode,
+          'accountId': accountId,
+          if (email != null) 'email': email,
+        },
+      );
+
+      final interactiveUrl = response['interactiveUrl'] as String?;
+      final returnUrl = response['returnUrl'] as String?;
+      if (interactiveUrl == null || interactiveUrl.isEmpty ||
+          returnUrl == null || returnUrl.isEmpty) {
+        throw const TransactionFailedException(
+          'The network accepted the request but did not return a complete SEP-24 session.',
+        );
+      }
+      return Sep24DepositSession(
+        interactiveUrl: interactiveUrl,
+        returnUrl: returnUrl,
+      );
+    } catch (e) {
+      rethrow;
+    }
+  }
+}
+
+/// Holds the URLs returned by the backend for a SEP-24 deposit session.
+class Sep24DepositSession {
+  const Sep24DepositSession({
+    required this.interactiveUrl,
+    required this.returnUrl,
+  });
+
+  /// The anchor's interactive URL to be opened in an in-app WebView.
+  final String interactiveUrl;
+
+  /// The URL the anchor redirects to when the transaction flow completes.
+  final String returnUrl;
 }

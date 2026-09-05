@@ -47,7 +47,7 @@ class ApiClient {
 
   /// POSTs [body] as JSON to [url], retrying transient failures with
   /// exponential backoff.
-  ///
+///
   /// Throws a mapped domain exception on permanent failure:
   /// - [TransactionFailedException] when the network rejects the transaction
   ///   (HTTP 400, e.g. bad signature);
@@ -66,7 +66,7 @@ class ApiClient {
       try {
         return await _postOnce(url, body, headers: headers);
       } on TransactionFailedException {
-        // Permanent rejection (bad signature, invalid sequence, etc.) —
+        // Permanent rejection (bad signature, invalid sequence, etc.) &
         // retrying will not help.
         rethrow;
       } on ApiRequestException {
@@ -95,6 +95,28 @@ class ApiClient {
       'The network is temporarily congested. Please try again shortly.',
       statusCode: lastStatusCode,
       cause: lastError,
+    );
+  }
+
+  /// Starts a SEP-24 deposit by requesting the interactive anchor URL.
+  ///
+  /// The [endpointUrl] should point to the backend that initiates the SEP-24
+  /// flow. The response is expected to contain the anchor's interactive URL
+  /// under the `url` key. Returns that URL so the caller can open it in a
+  /// WebView.
+  Future<String> startSep24Deposit({
+    required String endpointUrl,
+    required Map<String, dynamic> depositParams,
+    Map<String, String>? headers,
+  }) async {
+    final response = await postWithRetry(endpointUrl, depositParams, headers: headers);
+    final url = response['url'];
+    if (url is String && url.isNotEmpty) {
+      return url;
+    }
+    throw ApiRequestException(
+      'SEP-24 deposit response did not include an interactive URL.',
+      statusCode: null,
     );
   }
 
@@ -177,7 +199,7 @@ class ApiClient {
         // Fall through to the generic message below.
       }
     }
-    return 'Request failed with HTTP $statusCode.';
+    return 'Request failed with HTTP statusCode.';
   }
 
   /// Exponential backoff: baseDelay * 2^(attempt-1), capped at [maxDelay].

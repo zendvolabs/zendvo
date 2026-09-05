@@ -1,14 +1,15 @@
 name: Mobile CI
-
 on:
   push:
     branches: [main, master, develop]
     paths:
       - 'mobile/**'
+      - '.github/workflows/mobile-ci.yml'
   pull_request:
     branches: [main, master, develop]
     paths:
       - 'mobile/**'
+      - '.github/workflows/mobile-ci.yml'
 
 jobs:
   build-and-test:
@@ -34,7 +35,7 @@ jobs:
         run: flutter analyze
 
       - name: Run Tests
-        run: flutter test || echo "No tests found or tests failed"
+        run: flutter test
 
       - name: Build APK (Debug)
         run: flutter build apk --debug
