@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "ts-node -r tsconfig-paths/register src/server.ts",
-    "build": "tsc -p tsconfig.build.json",
+    "dev": "node init && ts-node -r tsconfig-paths/register src/server.ts",
+    "build": "node init && tsc -p tsconfig.build.json",
     "tsc": "tsc --noEmit",
-    "start": "node dist/server.js",
+    "start": "node init && node dist/server.js",
     "test": "jest",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",

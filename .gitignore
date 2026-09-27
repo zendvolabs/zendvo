@@ -31,7 +31,6 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
-.env*
 
 # vercel
 .vercel
@@ -54,3 +53,7 @@ next-env.d.ts
 # Smart Contracts (Rust/Soroban)
 contracts/target/
 /contracts/.soroban/
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
+config.bat

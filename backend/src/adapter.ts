@@ -19,10 +19,15 @@ export function makeExpressHandler(nextHandler: Function) {
         }
       }
 
-      // Pass the Express req stream directly as body so it can be parsed as JSON, Text or Form Data natively
+      // Pass the Express req stream directly as body so it can be parsed as JSON, Text or Form Data natively.
+      // Exception: if an earlier middleware (e.g. validateRequestSignature) already
+      // consumed the raw stream to hash the body, it stashes the buffered bytes on
+      // `req.rawBody`. Prefer that buffer so the stream being already-drained
+      // doesn't produce an empty body downstream.
       let body: any = null;
       if (req.method !== "GET" && req.method !== "HEAD") {
-        body = req;
+        const bufferedBody = (req as ExpRequest & { rawBody?: Buffer }).rawBody;
+        body = bufferedBody ?? req;
       }
 
       const webReq = new NextRequest(url, {

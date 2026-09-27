@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { makeExpressHandler } from "./adapter";
+import { validateRequestSignature } from "./lib/middleware/signature_validator";
 import {
   GET as bankAccountsGet,
   POST as bankAccountsPost,
@@ -162,10 +163,26 @@ apiRouter.get("/api/users/resolve", makeExpressHandler(resolveRecipientGet));
 apiRouter.delete("/api/users/account", makeExpressHandler(deleteAccountDelete));
 
 // 5. Wallet routes
-apiRouter.post("/api/wallet/register", makeExpressHandler(walletRegisterPost));
-apiRouter.post("/api/wallet/deposit", makeExpressHandler(walletDepositPost));
-apiRouter.post("/api/wallet/withdraw", makeExpressHandler(walletWithdrawPost));
+// NOTE: these four are sensitive wallet operations (Issue #424) and are now
+// gated by `validateRequestSignature`, which verifies the caller signed the
+// request with their registered Stellar keypair before the handler runs.
+apiRouter.post(
+  "/api/wallet/register",
+  validateRequestSignature,
+  makeExpressHandler(walletRegisterPost),
+);
+apiRouter.post(
+  "/api/wallet/deposit",
+  validateRequestSignature,
+  makeExpressHandler(walletDepositPost),
+);
+apiRouter.post(
+  "/api/wallet/withdraw",
+  validateRequestSignature,
+  makeExpressHandler(walletWithdrawPost),
+);
 apiRouter.post(
   "/api/wallet/trustline/usdc",
+  validateRequestSignature,
   makeExpressHandler(walletTrustlinePost),
 );
