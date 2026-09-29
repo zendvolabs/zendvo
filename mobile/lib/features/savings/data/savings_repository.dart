@@ -76,6 +76,29 @@ class SavingsRepository {
     }
   }
 
+  /// Requests an unsigned, sponsored USDC trustline activation XDR envelope
+  /// from the backend for the given [accountId] (the account public key).
+  ///
+  /// The returned envelope is unsigned and must be signed locally by the
+  /// wallet before being submitted via [submitSignedXdr]. Domain exceptions
+  /// from [ApiClient.postWithRetry] (e.g. [TransactionFailedException],
+  /// [NetworkCongestedException]) are rethrown so the caller/UI controller
+  /// can handle them.
+  Future<String> requestTrustlineXdr(String accountId) async {
+    final response = await _apiClient.postWithRetry(
+      '$_baseUrl/api/savings/trustline',
+      {'accountId': accountId},
+    );
+
+    final xdr = response['xdr'] as String?;
+    if (xdr == null || xdr.isEmpty) {
+      throw const TransactionFailedException(
+        'The network accepted the request but did not return a trustline XDR.',
+      );
+    }
+    return xdr;
+  }
+
   /// Submits a signed XDR envelope to the backend relay with automatic
   /// retries for transient network failures.
   ///
