@@ -76,6 +76,58 @@ class SavingsRepository {
     }
   }
 
+  /// Submits a signed trustline XDR envelope to the backend relay.
+  ///
+  /// This is an explicit, dedicated path for trustline activation submissions.
+  /// It uses the same `/api/transactions/submit` endpoint as [submitSignedXdr]
+  /// but maps permanent failures to [TrustlineActivationException] rather than
+  /// the generic [TransactionFailedException], allowing callers to distinguish
+  /// trustline-specific errors from general submission errors and show
+  /// targeted recovery guidance.
+  ///
+  /// On success returns the on-chain transaction hash. On permanent failure
+  /// a [TrustlineActivationException] is thrown; on transient network failure
+  /// a [NetworkCongestedException] is thrown after retries are exhausted.
+  Future<String> submitTrustlineXdr(String signedXdr) async {
+    if (signedXdr.trim().isEmpty) {
+      throw const TrustlineActivationException(
+        'Signed trustline XDR must not be empty.',
+      );
+    }
+
+    try {
+      final response = await _apiClient.postWithRetry(
+        '$_baseUrl/api/transactions/submit',
+        {'signedXdr': signedXdr},
+      );
+
+      final hash = response['hash'] as String?;
+      if (hash == null || hash.isEmpty) {
+        throw const TrustlineActivationException(
+          'The network accepted the trustline transaction but did not return a hash.',
+        );
+      }
+      return hash;
+    } on TransactionFailedException catch (e) {
+      // Map generic transaction rejections to trustline-specific errors so
+      // the caller can surface targeted recovery instructions.
+      throw TrustlineActivationException(
+        e.message,
+        statusCode: e.statusCode,
+        cause: e.cause,
+      );
+    } on NetworkCongestedException {
+      rethrow;
+    } on ApiException {
+      rethrow;
+    } catch (error) {
+      throw TrustlineActivationException(
+        'Failed to activate trustline. Please try again.',
+        cause: error,
+      );
+    }
+  }
+
   /// Submits a signed XDR envelope to the backend relay with automatic
   /// retries for transient network failures.
   ///
