@@ -42,3 +42,9 @@ class ConflictException extends ApiException {
 class ApiRequestException extends ApiException {
   const ApiRequestException(super.message, {super.statusCode, super.cause});
 }
+
+/// Thrown when a trustline activation is permanently rejected by the network,
+/// e.g. bad XDR signature, invalid sequence number, or missing sponsorship.
+class TrustlineActivationException extends ApiException {
+  const TrustlineActivationException(super.message, {super.statusCode, super.cause});
+}
