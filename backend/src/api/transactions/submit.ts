@@ -5,7 +5,12 @@ import { eq } from "drizzle-orm";
 import { getAuthPayload } from "@/lib/auth-session";
 import { createProblemDetails } from "@/lib/api-utils";
 import { SubmissionService } from "@/lib/stellar/submission_service";
+import { SavingsService } from "@/server/services/savingsService";
 
+/**
+ * Submits a signed XDR to the Stellar network and records the transaction
+ * in the database within an ACID transaction to ensure consistency.
+ */
 export async function POST(request: NextRequest) {
   try {
     const payload = await getAuthPayload(request);
@@ -49,20 +54,35 @@ export async function POST(request: NextRequest) {
     const result = await SubmissionService.submitXdrToNetwork(signedXdr, user.stellarAddress);
 
     if (result.success && result.hash) {
-      // Log the submitted transaction in the database
-      await db.insert(transactions).values({
-        userId: userId as string,
-        amount: 0,
-        currency: "USDC",
-        type: "blockchain_submission" as const,
-        status: "submitted" as const,
-        reference: result.hash,
+      const submissionHash = result.hash;
+
+      // Log the submitted transaction in the database within a transaction
+      await db.transaction(async (tx) => {
+        // Insert transaction record
+        await tx.insert(transactions).values({
+          userId: userId as string,
+          amount: 0,
+          currency: "USDC",
+          type: "blockchain_submission" as const,
+          status: "submitted" as const,
+          reference: submissionHash,
+        });
+
+        // Record pending savings transaction
+        // The actual type (deposit/withdrawal) will be determined by the webhook
+        await SavingsService.recordPending(
+          tx,
+          userId as string,
+          "deposit",
+          submissionHash,
+          user.vaultContractId || undefined,
+        );
       });
 
       return new Response(
         JSON.stringify({
           success: true,
-          hash: result.hash,
+          hash: submissionHash,
           status: result.status,
           attempts: result.attempts,
         }),
