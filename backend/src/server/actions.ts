@@ -13,6 +13,7 @@ import {
   wallets,
 } from "@/lib/db/schema";
 import { verifyAccessToken } from "@/lib/tokens";
+import { TelemetryService } from "@/lib/services/telemetry_service";
 
 export interface PendingSavingsTransactionInput {
   type: "deposit" | "withdrawal";
@@ -211,6 +212,39 @@ export async function recordSuccessfulSavingsTransaction(
         if (existing.userId !== input.userId) {
           throw new Error("Transaction hash already claimed by another user");
         }
+        if (existing.status === "pending") {
+          const [updatedHistory] = await tx
+            .update(savingsHistory)
+            .set({
+              status: "completed",
+              sharesToBurn: input.sharesToBurn ?? existing.sharesToBurn,
+              sharePrice: input.sharePrice ?? existing.sharePrice,
+              sharesBalance: input.sharesBalance ?? existing.sharesBalance,
+              updatedAt: new Date(),
+            })
+            .where(eq(savingsHistory.id, existing.id))
+            .returning();
+
+          const [updatedUser] = await tx
+            .update(users)
+            .set({
+              savingsBalance:
+                input.type === "deposit"
+                  ? sql`${users.savingsBalance} + ${amount}`
+                  : sql`${users.savingsBalance} - ${amount}`,
+              savingsStatus: "active",
+              updatedAt: new Date(),
+            })
+            .where(eq(users.id, input.userId))
+            .returning({
+              savingsBalance: users.savingsBalance,
+            });
+
+          return {
+            transaction: updatedHistory || existing,
+            balance: updatedUser?.savingsBalance,
+          };
+        }
         return { transaction: existing, balance: lockedUser.savingsBalance };
       }
 
@@ -264,10 +298,29 @@ export async function recordSuccessfulSavingsTransaction(
       return { transaction: inserted, balance: updatedUser.savingsBalance };
     });
 
+    TelemetryService.logConfirmationSuccess({
+      userId: input.userId,
+      transactionType: input.type,
+      amount,
+      currency,
+      vaultContractId,
+      txHash: transactionHash,
+    });
+
     revalidatePath("/dashboard");
     return { success: true, ...result };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
+    TelemetryService.logConfirmationFailure({
+      userId: input.userId,
+      transactionType: input.type,
+      amount,
+      currency,
+      vaultContractId,
+      txHash: transactionHash,
+      errorCode: "CONFIRMATION_RECORD_FAILED",
+      error: err,
+    });
     return { success: false, error: message };
   }
 }
@@ -326,6 +379,18 @@ export async function recordFailedSavingsTransaction(
           if (existing.userId !== input.userId) {
             throw new Error("Transaction hash already claimed by another user");
           }
+          if (existing.status === "pending") {
+            const [updatedHistory] = await tx
+              .update(savingsHistory)
+              .set({
+                status: "failed",
+                errorMessage: input.errorMessage.trim(),
+                updatedAt: new Date(),
+              })
+              .where(eq(savingsHistory.id, existing.id))
+              .returning();
+            return { transaction: updatedHistory || existing };
+          }
           return { transaction: existing };
         }
       }
@@ -349,10 +414,31 @@ export async function recordFailedSavingsTransaction(
       return { transaction: inserted };
     });
 
+    TelemetryService.logConfirmationFailure({
+      userId: input.userId,
+      transactionType: input.type,
+      amount,
+      currency,
+      vaultContractId,
+      txHash: transactionHash ?? undefined,
+      errorCode: "ON_CHAIN_FAILURE",
+      error: input.errorMessage.trim(),
+    });
+
     revalidatePath("/dashboard");
     return { success: true, ...result };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
+    TelemetryService.logConfirmationFailure({
+      userId: input.userId,
+      transactionType: input.type,
+      amount,
+      currency,
+      vaultContractId,
+      txHash: transactionHash ?? undefined,
+      errorCode: "CONFIRMATION_RECORD_FAILED",
+      error: err,
+    });
     return { success: false, error: message };
   }
 }

@@ -1,5 +1,6 @@
 import { StrKey, TransactionBuilder, Networks, Keypair } from "@stellar/stellar-sdk";
 import { transactions, users } from "@/lib/db/schema";
+import { TelemetryService } from "@/lib/services/telemetry_service";
 export interface SubmitXdrResponse {
   hash: string;
   fee: number;
@@ -127,6 +128,16 @@ export class SubmissionService {
 
         // Check if it's a known retryable error
         if (response.status === 502 || response.status === 503 || response.status === 504) {
+          TelemetryService.log({
+            level: "warn",
+            event: "stellar.horizon_submission.attempt_retryable_error",
+            stage: "network_submission",
+            status: "failed",
+            stellarAddress: userStellarAddress,
+            errorCode: response.status,
+            errorMessage,
+            metadata: { isRetryable: true },
+          });
           return { success: false, error: `Network error (${response.status}): ${errorMessage}`, isRetryable: true };
         }
 
@@ -141,6 +152,17 @@ export class SubmissionService {
           errorMessage = `Horizon error: ${response.status} - ${errorBody}`;
         }
 
+        TelemetryService.log({
+          level: "error",
+          event: "stellar.horizon_submission.attempt_permanent_error",
+          stage: "network_submission",
+          status: "failed",
+          stellarAddress: userStellarAddress,
+          errorCode: response.status,
+          errorMessage,
+          metadata: { isRetryable: false },
+        });
+
         return { success: false, error: errorMessage, isRetryable: false };
       }
 
@@ -149,6 +171,15 @@ export class SubmissionService {
       if (!data.hash) {
         return { success: false, error: "Submission succeeded but no hash returned from Horizon", isRetryable: false };
       }
+
+      TelemetryService.log({
+        level: "info",
+        event: "stellar.horizon_submission.attempt_succeeded",
+        stage: "network_submission",
+        status: "completed",
+        stellarAddress: userStellarAddress,
+        txHash: data.hash,
+      });
 
       return {
         success: true,

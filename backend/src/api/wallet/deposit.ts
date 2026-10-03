@@ -6,13 +6,31 @@ import {
 import { getAuthPayload } from "@/lib/auth-session";
 import { createProblemDetails } from "@/lib/api-utils";
 import { db } from "@/lib/db";
-import { users } from "@/lib/db/schema";
+import { savingsHistory, users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import {
+  TelemetryService,
+  extractTraceId,
+} from "@/lib/services/telemetry_service";
 
 export async function POST(request: NextRequest) {
+  const traceId = extractTraceId(request);
+  const elapsedTimer = TelemetryService.startTimer();
+  let currentUserId: string | undefined;
+  let requestedAmount: string | undefined;
+  let userStellarAddress: string | undefined;
+
   try {
     const payload = await getAuthPayload(request);
     if (!payload) {
+      TelemetryService.logXdrGenerationFailure({
+        traceId,
+        transactionType: "deposit",
+        currency: "USDC",
+        durationMs: elapsedTimer(),
+        errorCode: 401,
+        error: "Authentication required",
+      });
       return createProblemDetails(
         "about:blank",
         "Unauthorized",
@@ -22,6 +40,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { userId } = payload;
+    currentUserId = userId;
 
     let body: unknown;
     try {
@@ -35,7 +54,29 @@ export async function POST(request: NextRequest) {
         ? (body as { amount?: unknown })
         : {};
 
+    if (typeof amount === "string") {
+      requestedAmount = amount.trim();
+    }
+
+    TelemetryService.logXdrGenerationStart({
+      traceId,
+      userId,
+      transactionType: "deposit",
+      amount: requestedAmount,
+      currency: "USDC",
+    });
+
     if (typeof amount !== "string" || !amount.trim()) {
+      TelemetryService.logXdrGenerationFailure({
+        traceId,
+        userId,
+        transactionType: "deposit",
+        amount: requestedAmount,
+        currency: "USDC",
+        durationMs: elapsedTimer(),
+        errorCode: 400,
+        error: "amount is required and must be a human-readable USDC amount string",
+      });
       return createProblemDetails(
         "about:blank",
         "Bad Request",
@@ -50,6 +91,16 @@ export async function POST(request: NextRequest) {
       .where(eq(users.id, userId));
 
     if (!user?.stellarAddress) {
+      TelemetryService.logXdrGenerationFailure({
+        traceId,
+        userId,
+        transactionType: "deposit",
+        amount: requestedAmount,
+        currency: "USDC",
+        durationMs: elapsedTimer(),
+        errorCode: 400,
+        error: "No Stellar address registered for this account",
+      });
       return createProblemDetails(
         "about:blank",
         "Bad Request",
@@ -58,10 +109,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    userStellarAddress = user.stellarAddress;
+
     const result = await DefindexService.buildDeFindexDepositXdr(
       user.stellarAddress,
       amount.trim(),
     );
+
+    try {
+      await db.insert(savingsHistory).values({
+        userId,
+        vaultContractId: result.contractId,
+        type: "deposit",
+        status: "pending",
+        amount: Number(amount.trim()) || Number(result.amount),
+        currency: "USDC",
+        transactionHash: result.txHash,
+        sharePrice: result.sharePrice ? Number(result.sharePrice) : null,
+        sharesBalance: result.userBalance ? Number(result.userBalance) : null,
+      });
+    } catch (dbError) {
+      console.error("[SAVINGS_HISTORY_DEPOSIT_INSERT_ERROR]", dbError);
+    }
+
+    TelemetryService.logXdrGenerationSuccess({
+      traceId,
+      userId,
+      transactionType: "deposit",
+      amount: amount.trim(),
+      currency: "USDC",
+      stellarAddress: user.stellarAddress,
+      txHash: result.txHash,
+      durationMs: elapsedTimer(),
+    });
 
     return NextResponse.json(
       { success: true, ...result },
@@ -69,6 +149,24 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error("[WALLET_DEPOSIT_ERROR]", error);
+
+    const errorCode =
+      error instanceof DefindexServiceError
+        ? error.kind.toUpperCase()
+        : "INTERNAL_ERROR";
+
+    TelemetryService.logXdrGenerationFailure({
+      traceId,
+      userId: currentUserId,
+      transactionType: "deposit",
+      amount: requestedAmount,
+      currency: "USDC",
+      stellarAddress: userStellarAddress,
+      durationMs: elapsedTimer(),
+      errorCode,
+      error,
+    });
+
     if (error instanceof DefindexServiceError) {
       switch (error.kind) {
         case "configuration":

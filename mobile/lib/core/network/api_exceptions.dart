@@ -42,3 +42,13 @@ class ConflictException extends ApiException {
 class ApiRequestException extends ApiException {
   const ApiRequestException(super.message, {super.statusCode, super.cause});
 }
+
+/// Thrown when the vault does not have enough shares or USDC to honour a
+/// withdrawal request (HTTP 422 from the backend withdrawal endpoint).
+///
+/// The UI should surface this as a user-actionable message ("Insufficient
+/// vault funds — please try a smaller amount or retry later") rather than a
+/// generic network error so the user knows exactly why the operation failed.
+class InsufficientVaultFundsException extends ApiException {
+  const InsufficientVaultFundsException(super.message, {super.statusCode, super.cause});
+}

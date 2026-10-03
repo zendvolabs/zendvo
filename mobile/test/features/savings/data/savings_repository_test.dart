@@ -232,4 +232,207 @@ void main() {
       expect(repository.submissionStatus.value, SavingsSubmissionStatus.idle);
     });
   });
+
+  group('SavingsRepository.submitWithdrawalXdr', () {
+    test('submits the signed XDR and reports succeeded state with the hash', () async {
+      final (server, baseUri) = await startServer((request) async {
+        expect(request.uri.path, '/api/transactions/submit');
+        final body = await utf8.decoder.bind(request).join();
+        expect(jsonDecode(body), {'signedXdr': 'signed_withdrawal_xdr'});
+        return jsonResponse(request, 200, {'hash': 'withdrawal-tx-hash-001'});
+      });
+      addTearDown(() => server.close(force: true));
+
+      final repository = SavingsRepository(
+        apiClient: ApiClient(baseDelay: const Duration(milliseconds: 1)),
+        baseUrl: baseUri.toString(),
+      );
+
+      expect(repository.submissionStatus.value, SavingsSubmissionStatus.idle);
+
+      final hash = await repository.submitWithdrawalXdr('signed_withdrawal_xdr');
+
+      expect(hash, 'withdrawal-tx-hash-001');
+      expect(repository.submissionStatus.value, SavingsSubmissionStatus.succeeded);
+    });
+
+    test('HTTP 422 maps to InsufficientVaultFundsException and reverts state', () async {
+      final (server, baseUri) = await startServer((request) async {
+        return jsonResponse(request, 422, {'message': 'Insufficient vault funds'});
+      });
+      addTearDown(() => server.close(force: true));
+
+      final repository = SavingsRepository(
+        apiClient: ApiClient(baseDelay: const Duration(milliseconds: 1)),
+        baseUrl: baseUri.toString(),
+      );
+
+      await expectLater(
+        repository.submitWithdrawalXdr('signed_withdrawal_xdr'),
+        throwsA(
+          isA<InsufficientVaultFundsException>().having(
+            (e) => e.statusCode,
+            'statusCode',
+            422,
+          ),
+        ),
+      );
+
+      expect(repository.submissionStatus.value, SavingsSubmissionStatus.failed);
+
+      repository.resetSubmissionState();
+      expect(repository.submissionStatus.value, SavingsSubmissionStatus.idle);
+    });
+
+    test('HTTP 400 maps to TransactionFailedException and reverts state', () async {
+      final (server, baseUri) = await startServer((request) async {
+        return jsonResponse(request, 400, {'message': 'bad XDR signature'});
+      });
+      addTearDown(() => server.close(force: true));
+
+      final repository = SavingsRepository(
+        apiClient: ApiClient(baseDelay: const Duration(milliseconds: 1)),
+        baseUrl: baseUri.toString(),
+      );
+
+      await expectLater(
+        repository.submitWithdrawalXdr('signed_withdrawal_xdr'),
+        throwsA(isA<TransactionFailedException>()),
+      );
+
+      expect(repository.submissionStatus.value, SavingsSubmissionStatus.failed);
+
+      repository.resetSubmissionState();
+      expect(repository.submissionStatus.value, SavingsSubmissionStatus.idle);
+    });
+
+    test('transient failures are retried and succeed on recovery', () async {
+      var attempts = 0;
+      final (server, baseUri) = await startServer((request) async {
+        attempts++;
+        if (attempts < 3) {
+          return jsonResponse(request, 503, {'message': 'node overloaded'});
+        }
+        return jsonResponse(request, 200, {'hash': 'withdrawal-tx-hash-002'});
+      });
+      addTearDown(() => server.close(force: true));
+
+      final repository = SavingsRepository(
+        apiClient: ApiClient(maxRetries: 3, baseDelay: const Duration(milliseconds: 1)),
+        baseUrl: baseUri.toString(),
+      );
+
+      final hash = await repository.submitWithdrawalXdr('signed_withdrawal_xdr');
+
+      expect(attempts, 3);
+      expect(hash, 'withdrawal-tx-hash-002');
+      expect(repository.submissionStatus.value, SavingsSubmissionStatus.succeeded);
+    });
+
+    test('congestion after retries maps to NetworkCongestedException and reverts state', () async {
+      final (server, baseUri) = await startServer((request) async {
+        return jsonResponse(request, 503, {'message': 'node overloaded'});
+      });
+      addTearDown(() => server.close(force: true));
+
+      final repository = SavingsRepository(
+        apiClient: ApiClient(maxRetries: 3, baseDelay: const Duration(milliseconds: 1)),
+        baseUrl: baseUri.toString(),
+      );
+
+      await expectLater(
+        repository.submitWithdrawalXdr('signed_withdrawal_xdr'),
+        throwsA(isA<NetworkCongestedException>()),
+      );
+      expect(repository.submissionStatus.value, SavingsSubmissionStatus.failed);
+
+      repository.resetSubmissionState();
+      expect(repository.submissionStatus.value, SavingsSubmissionStatus.idle);
+    });
+
+    test('missing hash in success response throws TransactionFailedException', () async {
+      final (server, baseUri) = await startServer((request) async {
+        return jsonResponse(request, 200, {'success': true});
+      });
+      addTearDown(() => server.close(force: true));
+
+      final repository = SavingsRepository(
+        apiClient: ApiClient(baseDelay: const Duration(milliseconds: 1)),
+        baseUrl: baseUri.toString(),
+      );
+
+      await expectLater(
+        repository.submitWithdrawalXdr('signed_withdrawal_xdr'),
+        throwsA(
+          isA<TransactionFailedException>().having(
+            (e) => e.message,
+            'message',
+            contains('did not return a transaction hash'),
+          ),
+        ),
+      );
+      expect(repository.submissionStatus.value, SavingsSubmissionStatus.failed);
+    });
+  });
+
+  group('SavingsRepository.requestWithdrawalXdr', () {
+    test('requests unsigned withdrawal XDR from backend', () async {
+      final (server, baseUri) = await startServer((request) async {
+        expect(request.uri.path, '/api/wallet/withdraw');
+        final body = await utf8.decoder.bind(request).join();
+        expect(jsonDecode(body), {'amount': '100.0', 'accountId': 'GXYZ'});
+        return jsonResponse(request, 200, {'unsignedxdr': 'unsigned_withdrawal_xdr'});
+      });
+      addTearDown(() => server.close(force: true));
+
+      final repository = SavingsRepository(
+        apiClient: ApiClient(baseDelay: const Duration(milliseconds: 1)),
+        baseUrl: baseUri.toString(),
+      );
+
+      final xdr = await repository.requestWithdrawalXdr('100.0', 'GXYZ');
+
+      expect(xdr, 'unsigned_withdrawal_xdr');
+    });
+
+    test('throws TransactionFailedException when unsignedxdr is missing', () async {
+      final (server, baseUri) = await startServer((request) async {
+        return jsonResponse(request, 200, {'success': true});
+      });
+      addTearDown(() => server.close(force: true));
+
+      final repository = SavingsRepository(
+        apiClient: ApiClient(baseDelay: const Duration(milliseconds: 1)),
+        baseUrl: baseUri.toString(),
+      );
+
+      await expectLater(
+        repository.requestWithdrawalXdr('100.0', 'GXYZ'),
+        throwsA(
+          isA<TransactionFailedException>().having(
+            (e) => e.message,
+            'message',
+            contains('did not return a withdrawal XDR'),
+          ),
+        ),
+      );
+    });
+
+    test('propagates network errors', () async {
+      final (server, baseUri) = await startServer((request) async {
+        return jsonResponse(request, 500, {'message': 'server error'});
+      });
+      addTearDown(() => server.close(force: true));
+
+      final repository = SavingsRepository(
+        apiClient: ApiClient(baseDelay: const Duration(milliseconds: 1)),
+        baseUrl: baseUri.toString(),
+      );
+
+      await expectLater(
+        repository.requestWithdrawalXdr('100.0', 'GXYZ'),
+        throwsA(isA<ApiException>()),
+      );
+    });
+  });
 }

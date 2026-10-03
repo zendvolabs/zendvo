@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { TransactionBuilderService } from "../../lib/stellar/transaction_builder";
 import { StrKey } from "@stellar/stellar-sdk";
+import {
+  TelemetryService,
+  extractTraceId,
+} from "@/lib/services/telemetry_service";
 
 export async function POST(request: NextRequest) {
+  const traceId = extractTraceId(request);
+  const elapsedTimer = TelemetryService.startTimer();
+  let requestedPublicKey: string | undefined;
+
   try {
     let body: Record<string, any>;
     try {
@@ -12,8 +20,22 @@ export async function POST(request: NextRequest) {
     }
 
     const publicKey = body.publicKey || body.targetAddress;
+    requestedPublicKey = publicKey;
+
+    TelemetryService.logXdrGenerationStart({
+      traceId,
+      transactionType: "activation",
+      stellarAddress: publicKey,
+    });
 
     if (!publicKey) {
+      TelemetryService.logXdrGenerationFailure({
+        traceId,
+        transactionType: "activation",
+        durationMs: elapsedTimer(),
+        errorCode: 400,
+        error: "publicKey is required",
+      });
       return NextResponse.json(
         { message: "publicKey is required" },
         { status: 400 }
@@ -21,6 +43,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (!StrKey.isValidEd25519PublicKey(publicKey)) {
+      TelemetryService.logXdrGenerationFailure({
+        traceId,
+        transactionType: "activation",
+        stellarAddress: publicKey,
+        durationMs: elapsedTimer(),
+        errorCode: 400,
+        error: "Invalid Stellar public key",
+      });
       return NextResponse.json(
         { message: "Invalid Stellar public key" },
         { status: 400 }
@@ -29,15 +59,33 @@ export async function POST(request: NextRequest) {
 
     const xdr = await TransactionBuilderService.buildCreateAccountXdr(publicKey);
 
+    TelemetryService.logXdrGenerationSuccess({
+      traceId,
+      transactionType: "activation",
+      stellarAddress: publicKey,
+      durationMs: elapsedTimer(),
+    });
+
     return NextResponse.json(
       { success: true, xdr },
       { status: 200 }
     );
   } catch (error: any) {
     console.error("[ACTIVATE_WALLET_ERROR]", error);
+
+    TelemetryService.logXdrGenerationFailure({
+      traceId,
+      transactionType: "activation",
+      stellarAddress: requestedPublicKey,
+      durationMs: elapsedTimer(),
+      errorCode: 500,
+      error,
+    });
+
     return NextResponse.json(
       { message: error.message || "Internal server error" },
       { status: 500 }
     );
   }
 }
+

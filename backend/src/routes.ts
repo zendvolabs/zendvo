@@ -60,6 +60,8 @@ import { POST as walletRegisterPost } from "./api/wallet/register/route";
 import { GET as dashboardStatsGet } from "./api/dashboard/stats/route";
 import { POST as giftsMetadataPost } from "./api/gifts/metadata/route";
 import { GET as dashboardGiftsGet } from "./api/dashboard/gifts/route";
+// Savings
+import { GET as savingsDashboardGet } from "./api/savings/dashboard/route";
 // Gifts
 import { POST as giftRedeemPost } from "./api/gifts/redeem/route";
 import { POST as giftAppreciatePost } from "./api/gifts/appreciate/route";
@@ -185,4 +187,10 @@ apiRouter.post(
   "/api/wallet/trustline/usdc",
   validateRequestSignature,
   makeExpressHandler(walletTrustlinePost),
+);
+
+// 8. Savings routes
+apiRouter.get(
+  "/api/savings/dashboard",
+  makeExpressHandler(savingsDashboardGet),
 );
