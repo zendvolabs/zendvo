@@ -81,6 +81,62 @@ void main() {
     });
   });
 
+  group('SavingsRepository.requestTrustlineXdr', () {
+    test('posts the account public key and returns the unsigned XDR', () async {
+      final (server, baseUri) = await startServer((request) async {
+        expect(request.method, 'POST');
+        expect(request.uri.path, '/api/savings/trustline');
+        final body = await utf8.decoder.bind(request).join();
+        expect(jsonDecode(body), {'accountId': 'GABC'});
+        return jsonResponse(request, 200, {'success': true, 'xdr': 'unsigned_trustline_xdr'});
+      });
+      addTearDown(() => server.close(force: true));
+
+      final repository = SavingsRepository(
+        apiClient: ApiClient(baseDelay: const Duration(milliseconds: 1)),
+        baseUrl: baseUri.toString(),
+      );
+
+      final xdr = await repository.requestTrustlineXdr('GABC');
+
+      expect(xdr, 'unsigned_trustline_xdr');
+    });
+
+    test('throws TransactionFailedException when no XDR is returned', () async {
+      final (server, baseUri) = await startServer((request) async {
+        return jsonResponse(request, 200, {'success': true});
+      });
+      addTearDown(() => server.close(force: true));
+
+      final repository = SavingsRepository(
+        apiClient: ApiClient(baseDelay: const Duration(milliseconds: 1)),
+        baseUrl: baseUri.toString(),
+      );
+
+      await expectLater(
+        repository.requestTrustlineXdr('GABC'),
+        throwsA(isA<TransactionFailedException>()),
+      );
+    });
+
+    test('propagates permanent failures from the backend', () async {
+      final (server, baseUri) = await startServer((request) async {
+        return jsonResponse(request, 400, {'message': 'No Stellar address registered'});
+      });
+      addTearDown(() => server.close(force: true));
+
+      final repository = SavingsRepository(
+        apiClient: ApiClient(baseDelay: const Duration(milliseconds: 1)),
+        baseUrl: baseUri.toString(),
+      );
+
+      await expectLater(
+        repository.requestTrustlineXdr('GABC'),
+        throwsA(isA<TransactionFailedException>()),
+      );
+    });
+  });
+
   group('SavingsRepository.submitSignedXdr', () {
     test('submits the signed XDR and reports succeeded state with the hash', () async {
       final (server, baseUri) = await startServer((request) async {
