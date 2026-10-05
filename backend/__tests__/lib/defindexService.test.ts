@@ -915,3 +915,134 @@ describe("DefindexService.getVaultBalance", () => {
     expect(result.rawUserBalance).toBe(BALANCE_OF.toString());
   });
 });
+
+describe("DefindexService deposit builder - gap coverage", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    process.env.DEFINDEX_VAULT_CONTRACT_ID = VAULT_CONTRACT_ID;
+    process.env.SOROBAN_RPC_URL = "https://fake-rpc.example.com";
+    delete process.env.STELLAR_NETWORK_PASSPHRASE;
+
+    mockGetHealth.mockResolvedValue({ status: "healthy" });
+    mockDepositToVault.mockResolvedValue({
+      xdr: sdkDepositXdr(),
+      simulationResponse: {},
+      functionName: "deposit",
+      params: [],
+    });
+    mockSimulateTransaction.mockImplementation(async (tx: any) => {
+      switch (invokedMethod(tx)) {
+        case "total_supply":
+          return successResponse(nativeToScVal(TOTAL_SUPPLY, { type: "i128" }));
+        case "fetch_total_managed_funds":
+          return successResponse(managedFundsResponse());
+        case "balance_of":
+          return successResponse(nativeToScVal(BALANCE_OF, { type: "i128" }));
+        default:
+          throw new Error(`Unexpected contract method ${invokedMethod(tx)}`);
+      }
+    });
+  });
+
+  afterEach(() => {
+    delete process.env.DEFINDEX_VAULT_CONTRACT_ID;
+    delete process.env.SOROBAN_RPC_URL;
+  });
+
+  it("rejects malformed human-readable amounts before calling the SDK", async () => {
+    for (const amount of ["abc", "1e5", "50.00.00", "-5.00", ""]) {
+      await expect(
+        DefindexService.buildDeFindexDepositXdr(USER_ADDRESS, amount),
+      ).rejects.toMatchObject({ kind: "validation" });
+    }
+    expect(mockDepositToVault).not.toHaveBeenCalled();
+    expect(mockSimulateTransaction).not.toHaveBeenCalled();
+  });
+
+  it("wraps an invalid SDK XDR as an upstream error", async () => {
+    mockDepositToVault.mockResolvedValueOnce({
+      xdr: "not-valid-base64-xdr",
+      simulationResponse: {},
+    });
+
+    await expect(
+      DefindexService.calculateDepositParams(USER_ADDRESS, REQUESTED_AMOUNT),
+    ).rejects.toMatchObject({
+      kind: "upstream",
+      message: expect.stringContaining("invalid transaction XDR"),
+    });
+  });
+
+  it("fails upstream when the vault reports no managed assets", async () => {
+    mockSimulateTransaction.mockImplementation(async (tx: any) => {
+      switch (invokedMethod(tx)) {
+        case "total_supply":
+          return successResponse(nativeToScVal(TOTAL_SUPPLY, { type: "i128" }));
+        case "fetch_total_managed_funds":
+          return successResponse(
+            xdr.ScVal.scvVec([]) as unknown as xdr.ScVal,
+          );
+        case "balance_of":
+          return successResponse(nativeToScVal(BALANCE_OF, { type: "i128" }));
+        default:
+          throw new Error(`Unexpected contract method ${invokedMethod(tx)}`);
+      }
+    });
+
+    await expect(
+      DefindexService.calculateDepositParams(USER_ADDRESS, REQUESTED_AMOUNT),
+    ).rejects.toMatchObject({
+      kind: "upstream",
+      message: expect.stringContaining("no managed assets"),
+    });
+    expect(mockDepositToVault).not.toHaveBeenCalled();
+  });
+
+  it("fails upstream when the vault has shares but no managed funds", async () => {
+    mockSimulateTransaction.mockImplementation(async (tx: any) => {
+      switch (invokedMethod(tx)) {
+        case "total_supply":
+          return successResponse(nativeToScVal(TOTAL_SUPPLY, { type: "i128" }));
+        case "fetch_total_managed_funds":
+          return successResponse(managedFundsResponse(0n));
+        case "balance_of":
+          return successResponse(nativeToScVal(BALANCE_OF, { type: "i128" }));
+        default:
+          throw new Error(`Unexpected contract method ${invokedMethod(tx)}`);
+      }
+    });
+
+    await expect(
+      DefindexService.calculateDepositParams(USER_ADDRESS, REQUESTED_AMOUNT),
+    ).rejects.toMatchObject({
+      kind: "upstream",
+      message: expect.stringContaining(
+        "has shares in circulation but manages no USDC funds",
+      ),
+    });
+    expect(mockDepositToVault).not.toHaveBeenCalled();
+  });
+
+  it("fails upstream when the vault manages funds but has no shares in circulation", async () => {
+    mockSimulateTransaction.mockImplementation(async (tx: any) => {
+      switch (invokedMethod(tx)) {
+        case "total_supply":
+          return successResponse(nativeToScVal(0n, { type: "i128" }));
+        case "fetch_total_managed_funds":
+          return successResponse(managedFundsResponse(TOTAL_MANAGED));
+        case "balance_of":
+          return successResponse(nativeToScVal(0n, { type: "i128" }));
+        default:
+          throw new Error(`Unexpected contract method ${invokedMethod(tx)}`);
+      }
+    });
+
+    await expect(
+      DefindexService.calculateDepositParams(USER_ADDRESS, REQUESTED_AMOUNT),
+    ).rejects.toMatchObject({
+      kind: "upstream",
+      message: expect.stringContaining("has no shares in circulation"),
+    });
+    expect(mockDepositToVault).not.toHaveBeenCalled();
+  });
+});
