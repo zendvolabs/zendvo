@@ -54,3 +54,6 @@ next-env.d.ts
 # Smart Contracts (Rust/Soroban)
 contracts/target/
 /contracts/.soroban/
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
