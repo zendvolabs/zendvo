@@ -64,6 +64,13 @@
       "when": 1787331600000,
       "tag": "0008_transaction_verification",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787400000000,
+      "tag": "0009_gift_appreciation",
+      "breakpoints": true
     }
   ]
 }

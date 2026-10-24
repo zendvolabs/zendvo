@@ -764,11 +764,20 @@ export async function sendAppreciationEmailToSender(options: {
   recipientName?: string | null;
   message?: string | null;
   template?: string | null;
+  /** Human-readable reaction label, e.g. "❤️ Heart". */
+  reaction?: string | null;
   amount?: number;
   currency?: string;
 }) {
-  const { senderEmail, senderName, recipientName, message, template, amount, currency } = options;
-  const thankYouText = message || template || "Thank you for the wonderful gift!";
+  const { senderEmail, senderName, recipientName, message, template, reaction, amount, currency } = options;
+  const note = message || template;
+  const thankYouText = note
+    ? reaction
+      ? `${note} ${reaction}`
+      : note
+    : reaction
+      ? `Reacted with ${reaction}`
+      : "Thank you for the wonderful gift!";
   const displaySender = senderName || "Friend";
   const displayRecipient = recipientName || "The recipient";
   const giftContext = amount && currency ? ` for the ${amount} ${currency} gift` : "";

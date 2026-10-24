@@ -119,7 +119,7 @@ export const usedActionTokens = pgTable(
   {
     /** The JWT ID claim from the action token. */
     jti: text("jti").primaryKey(),
-    /** Mirrors the token's exp claim — used by the cleanup cron. */
+    /** Mirrors the token's exp claim â€” used by the cleanup cron. */
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -215,6 +215,9 @@ export const gifts = pgTable(
     linkExpiresAt: timestamp("link_expires_at"),
     completedAt: timestamp("completed_at"),
     recipientPhone: text("recipient_phone"),
+    appreciationMessage:  text("appreciation_message"),
+    appreciationReaction: text("appreciation_reaction"),
+    appreciatedAt:        timestamp("appreciated_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },

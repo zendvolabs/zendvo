@@ -90,6 +90,8 @@ import { GET as savingsDashboardGet } from "./api/savings/dashboard/route";
 import { POST as savingsTrustlinePost } from "./api/savings/trustline/route";
 import { GET as dashboardStatsGet } from "./api/dashboard/stats/route";
 import { GET as dashboardGiftsGet } from "./api/dashboard/gifts/route";
+// Gifts
+import { POST as giftAppreciatePost } from "./api/gifts/appreciate/route";
 
 export const apiRouter = Router();
 
@@ -102,6 +104,13 @@ apiRouter.get("/api/savings/dashboard", makeExpressHandler(savingsDashboardGet))
 apiRouter.post("/api/savings/trustline", makeExpressHandler(savingsTrustlinePost));
 apiRouter.get("/api/dashboard/stats", makeExpressHandler(dashboardStatsGet));
 apiRouter.get("/api/dashboard/gifts", makeExpressHandler(dashboardGiftsGet));
+
+// 3. Gifts routes
+apiRouter.post(
+  "/api/gifts/:id/appreciate",
+  makeExpressHandler(giftAppreciatePost),
+);
+apiRouter.post("/api/gifts/appreciate", makeExpressHandler(giftAppreciatePost));
 
 // 1. Authentication routes
 apiRouter.post("/api/auth", makeExpressHandler(authPost));
