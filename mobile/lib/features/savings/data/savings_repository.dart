@@ -76,6 +76,30 @@ class SavingsRepository {
     }
   }
 
+  /// Requests an unsigned trustline XDR envelope from the backend for the
+  /// given [accountId].
+  ///
+  /// Domain exceptions from [ApiClient.postWithRetry] are rethrown so the
+  /// caller/UI controller can handle them.
+  Future<String> requestTrustlineXdr(String accountId) async {
+    try {
+      final response = await _apiClient.postWithRetry(
+        '$_baseUrl/api/savings/trustline',
+        {'accountId': accountId},
+      );
+
+      final xdr = (response['xdr'] ?? response['unsignedxdr']) as String?;
+      if (xdr == null || xdr.isEmpty) {
+        throw const TransactionFailedException(
+          'The network accepted the request but did not return a trustline XDR.',
+        );
+      }
+      return xdr;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   /// Requests an unsigned withdrawal XDR envelope from the backend for the
   /// given [amount] and [accountId].
   ///
