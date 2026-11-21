@@ -347,19 +347,28 @@ export const transactions = pgTable(
   ],
 );
 
-export const giftsMetadata = pgTable("gifts_metadata", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  contractGiftId: text("contract_gift_id").notNull(),
-  userId: uuid("user_id").notNull().references(() => users.id),
-  message: text("message"),
-  hideAmount: boolean("hide_amount").default(false).notNull(),
-  stayAnonymous: boolean("stay_anonymous").default(false).notNull(),
-  imageUrl: text("image_url"),
-  processingFee: doublePrecision("processing_fee").default(0).notNull(),
-  status: text("status").default("pending").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+export const giftsMetadata = pgTable(
+  "gifts_metadata",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    contractGiftId: text("contract_gift_id").notNull(),
+    userId: uuid("user_id").notNull().references(() => users.id),
+    message: text("message"),
+    hideAmount: boolean("hide_amount").default(false).notNull(),
+    stayAnonymous: boolean("stay_anonymous").default(false).notNull(),
+    imageUrl: text("image_url"),
+    processingFee: doublePrecision("processing_fee").default(0).notNull(),
+    status: text("status").default("pending").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("gifts_metadata_contract_gift_id_unique").on(
+      table.contractGiftId,
+    ),
+    index("gifts_metadata_user_id_idx").on(table.userId),
+  ],
+);
 
 export const actionTokens = pgTable(
   "action_tokens",

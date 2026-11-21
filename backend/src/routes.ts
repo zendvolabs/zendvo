@@ -92,6 +92,10 @@ import { GET as dashboardStatsGet } from "./api/dashboard/stats/route";
 import { GET as dashboardGiftsGet } from "./api/dashboard/gifts/route";
 // Gifts
 import { POST as giftAppreciatePost } from "./api/gifts/appreciate/route";
+import {
+  GET as giftMetadataGet,
+  POST as giftMetadataPost,
+} from "./api/gifts/metadata/route";
 
 export const apiRouter = Router();
 
@@ -111,6 +115,10 @@ apiRouter.post(
   makeExpressHandler(giftAppreciatePost),
 );
 apiRouter.post("/api/gifts/appreciate", makeExpressHandler(giftAppreciatePost));
+
+// Off-chain gift metadata indexing
+apiRouter.post("/api/gifts/metadata", makeExpressHandler(giftMetadataPost));
+apiRouter.get("/api/gifts/metadata", makeExpressHandler(giftMetadataGet));
 
 // 1. Authentication routes
 apiRouter.post("/api/auth", makeExpressHandler(authPost));
