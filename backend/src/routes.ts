@@ -1,16 +1,5 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { makeExpressHandler } from "./adapter";
-import { validateRequestSignature } from "./lib/middleware/signature_validator";
-import {
-  GET as bankAccountsGet,
-  POST as bankAccountsPost,
-  PUT as bankAccountsPut,
-  DELETE as unlinkBankAccountDelete,
-} from "./api/wallet/banks/route";
-import { GET as walletBalanceGet } from "./api/wallet/balance/route";
-import { POST as walletDepositPost } from "./api/wallet/deposit";
-import { POST as walletWithdrawPost } from "./api/wallet/withdraw";
-import { POST as walletTrustlinePost } from "./api/wallet/trustline";
 
 // Streaming middleware to limit upload request size to 10MB without relying solely on Content-Length
 const limitUploadSize = (req: Request, res: Response, next: NextFunction) => {
@@ -53,10 +42,6 @@ const limitUploadSize = (req: Request, res: Response, next: NextFunction) => {
 // Auth
 import { POST as actionOtpPost } from "./api/auth/action-otp/route";
 import { POST as authPost } from "./api/auth/route";
-// Wallet
-import { GET as walletTransactionsGet } from "./api/wallet/transactions/route";
-import { POST as walletRegisterPost } from "./api/wallet/register/route";
-// Auth
 import { POST as forgotPasswordPost } from "./api/auth/forgot-password/route";
 import { POST as loginPost } from "./api/auth/login/route";
 import { POST as logoutPost } from "./api/auth/logout/route";
@@ -81,38 +66,19 @@ import { GET as resolveRecipientGet } from "./api/users/resolve/route";
 // Upload
 import { POST as uploadImagePost } from "./api/upload/image/route";
 
-// Transaction submission
-import { POST as transactionSubmitPost } from "./api/transactions/submit";
-
-// SEP-24 Webhook
-import { POST as sep24WebhookPost } from "./api/webhooks/sep24/route";
-import { GET as savingsDashboardGet } from "./api/savings/dashboard/route";
-import { POST as savingsTrustlinePost } from "./api/savings/trustline/route";
-import { GET as dashboardStatsGet } from "./api/dashboard/stats/route";
-import { GET as dashboardGiftsGet } from "./api/dashboard/gifts/route";
 // Gifts
 import { POST as giftAppreciatePost } from "./api/gifts/appreciate/route";
 
 export const apiRouter = Router();
 
-// 6. Transaction submission route
-apiRouter.post("/api/transactions/submit", makeExpressHandler(transactionSubmitPost));
-
-// 7. SEP-24 Anchor webhook listener
-apiRouter.post("/api/webhooks/sep24", makeExpressHandler(sep24WebhookPost));
-apiRouter.get("/api/savings/dashboard", makeExpressHandler(savingsDashboardGet));
-apiRouter.post("/api/savings/trustline", makeExpressHandler(savingsTrustlinePost));
-apiRouter.get("/api/dashboard/stats", makeExpressHandler(dashboardStatsGet));
-apiRouter.get("/api/dashboard/gifts", makeExpressHandler(dashboardGiftsGet));
-
-// 3. Gifts routes
+// Gifts routes
 apiRouter.post(
   "/api/gifts/:id/appreciate",
   makeExpressHandler(giftAppreciatePost),
 );
 apiRouter.post("/api/gifts/appreciate", makeExpressHandler(giftAppreciatePost));
 
-// 1. Authentication routes
+// Authentication routes
 apiRouter.post("/api/auth", makeExpressHandler(authPost));
 apiRouter.post("/api/auth/action-otp/send", makeExpressHandler(actionOtpPost));
 apiRouter.post("/api/auth/action-otp", makeExpressHandler(actionOtpPost));
@@ -155,47 +121,12 @@ apiRouter.post(
   makeExpressHandler(verifyDeletionOtpPost),
 );
 
-// 2. Users routes
+// Users routes
 apiRouter.get("/api/users/resolve", makeExpressHandler(resolveRecipientGet));
 
-
-
-// 5. Wallet routes
-// NOTE: these four are sensitive wallet operations (Issue #424) and are now
-// gated by `validateRequestSignature`, which verifies the caller signed the
-// request with their registered Stellar keypair before the handler runs.
+// Upload routes
 apiRouter.post(
-  "/api/wallet/register",
-  validateRequestSignature,
-  makeExpressHandler(walletRegisterPost),
+  "/api/upload/image",
+  limitUploadSize,
+  makeExpressHandler(uploadImagePost),
 );
-apiRouter.post(
-  "/api/wallet/deposit",
-  validateRequestSignature,
-  makeExpressHandler(walletDepositPost),
-);
-apiRouter.post(
-  "/api/wallet/withdraw",
-  validateRequestSignature,
-  makeExpressHandler(walletWithdrawPost),
-);
-apiRouter.post(
-  "/api/wallet/trustline/usdc",
-  validateRequestSignature,
-  makeExpressHandler(walletTrustlinePost),
-);
-
-// Wallet balance
-apiRouter.get("/api/wallet/balance", makeExpressHandler(walletBalanceGet));
-
-// Wallet bank accounts
-apiRouter.get("/api/wallet/banks", makeExpressHandler(bankAccountsGet));
-apiRouter.post("/api/wallet/banks", makeExpressHandler(bankAccountsPost));
-apiRouter.put("/api/wallet/banks/:id", makeExpressHandler(bankAccountsPut));
-apiRouter.delete(
-  "/api/wallet/banks/:id",
-  makeExpressHandler(unlinkBankAccountDelete),
-);
-
-
-
