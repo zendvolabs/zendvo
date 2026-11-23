@@ -69,6 +69,10 @@ import { POST as uploadImagePost } from "./api/upload/image/route";
 // Gifts
 import { POST as giftAppreciatePost } from "./api/gifts/appreciate/route";
 
+// Wallet
+import { POST as walletWithdrawPost } from "./api/wallet/withdraw";
+import { validateRequestSignature } from "./lib/middleware/signature_validator";
+
 export const apiRouter = Router();
 
 // Gifts routes
@@ -129,4 +133,11 @@ apiRouter.post(
   "/api/upload/image",
   limitUploadSize,
   makeExpressHandler(uploadImagePost),
+);
+
+// Wallet routes
+apiRouter.post(
+  "/api/wallet/withdraw",
+  validateRequestSignature,
+  makeExpressHandler(walletWithdrawPost),
 );
