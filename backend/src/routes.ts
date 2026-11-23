@@ -69,6 +69,9 @@ import { POST as uploadImagePost } from "./api/upload/image/route";
 // Gifts
 import { POST as giftAppreciatePost } from "./api/gifts/appreciate/route";
 
+// Savings
+import { POST as savingsTrustlinePost } from "./api/savings/trustline/route";
+
 export const apiRouter = Router();
 
 // Gifts routes
@@ -129,4 +132,10 @@ apiRouter.post(
   "/api/upload/image",
   limitUploadSize,
   makeExpressHandler(uploadImagePost),
+);
+
+// Savings routes
+apiRouter.post(
+  "/api/savings/trustline",
+  makeExpressHandler(savingsTrustlinePost),
 );
