@@ -75,6 +75,7 @@ import { POST as walletDepositPost } from "./api/wallet/deposit/route";
 import { validateRequestSignature } from "./lib/middleware/signature_validator";
 
 // Wallet
+import { GET as walletBalanceGet } from "./api/wallet/balance/route";
 import {
   DELETE as bankAccountDelete,
   POST as linkBankAccountPost,
@@ -177,6 +178,10 @@ apiRouter.delete(
 
 // SEP-24 anchor webhook listener
 apiRouter.post("/api/webhooks/sep24", makeExpressHandler(sep24WebhookPost));
+apiRouter.get(
+  "/api/wallet/balance",
+  makeExpressHandler(walletBalanceGet),
+);
 
 // Upload routes
 apiRouter.post(
