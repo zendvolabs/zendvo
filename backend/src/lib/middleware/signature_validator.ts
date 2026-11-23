@@ -1,7 +1,7 @@
 import { createHash } from "crypto";
 import type { Request, Response, NextFunction } from "express";
 import { eq } from "drizzle-orm";
-import { Keypair } from "@stellar/stellar-sdk";
+import { Keypair, StrKey } from "@stellar/stellar-sdk";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { verifyAccessToken } from "@/lib/tokens";
@@ -65,6 +65,39 @@ class NonceStore {
 }
 
 const nonceStore = new NonceStore();
+
+type RequestWithSignatureOptions = Request & {
+  rawBody?: Buffer;
+  signaturePublicKeySource?: "registered" | "submitted";
+};
+
+export function useSubmittedStellarAddressForSignature(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): void {
+  (req as RequestWithSignatureOptions).signaturePublicKeySource = "submitted";
+  next();
+}
+
+function getSubmittedStellarAddress(rawBody: Buffer): string | null {
+  try {
+    const body: unknown = JSON.parse(rawBody.toString("utf8"));
+    if (body === null || typeof body !== "object" || Array.isArray(body)) {
+      return null;
+    }
+
+    const value = (body as { stellarAddress?: unknown }).stellarAddress;
+    if (typeof value !== "string") {
+      return null;
+    }
+
+    const address = value.trim();
+    return StrKey.isValidEd25519PublicKey(address) ? address : null;
+  } catch {
+    return null;
+  }
+}
 
 function sha256Hex(input: Buffer | string): string {
   return createHash("sha256").update(input).digest("hex");
@@ -136,36 +169,41 @@ export async function validateRequestSignature(
     }
     const { userId } = authPayload;
 
-    // ── 4. Look up the user's registered Stellar public key ────────────────
-    let stellarAddress: string | null;
-    try {
-      const [row] = await db
-        .select({ stellarAddress: users.stellarAddress })
-        .from(users)
-        .where(eq(users.id, userId));
-      stellarAddress = row?.stellarAddress ?? null;
-    } catch {
-      res.status(500).json({ error: "Internal error during key lookup" });
-      return;
-    }
-
-    if (!stellarAddress) {
-      res
-        .status(401)
-        .json({ error: "No Stellar public key on record for user" });
-      return;
-    }
-
-    // ── 5. Buffer the raw body and rebuild the canonical signed payload ────
+    const requestWithOptions = req as RequestWithSignatureOptions;
     const rawBody =
       req.method === "GET" || req.method === "HEAD"
         ? Buffer.alloc(0)
         : await readRawBody(req);
+    requestWithOptions.rawBody = rawBody;
 
-    // We just fully drained the request stream, so downstream handlers
-    // (routed through the Express→Next adapter) can no longer read `req`
-    // as a stream. Stash the buffer so the adapter can use it instead.
-    (req as Request & { rawBody?: Buffer }).rawBody = rawBody;
+    let stellarAddress: string | null;
+    if (requestWithOptions.signaturePublicKeySource === "submitted") {
+      stellarAddress = getSubmittedStellarAddress(rawBody);
+      if (!stellarAddress) {
+        res.status(400).json({
+          error: "Missing or invalid stellarAddress to verify signature",
+        });
+        return;
+      }
+    } else {
+      try {
+        const [row] = await db
+          .select({ stellarAddress: users.stellarAddress })
+          .from(users)
+          .where(eq(users.id, userId));
+        stellarAddress = row?.stellarAddress ?? null;
+      } catch {
+        res.status(500).json({ error: "Internal error during key lookup" });
+        return;
+      }
+
+      if (!stellarAddress) {
+        res
+          .status(401)
+          .json({ error: "No Stellar public key on record for user" });
+        return;
+      }
+    }
 
     const bodyHash = sha256Hex(rawBody);
     const canonicalPayload = `${timestamp}:${req.method.toUpperCase()}:${req.originalUrl}:${bodyHash}`;
