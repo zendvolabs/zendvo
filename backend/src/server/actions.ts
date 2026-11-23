@@ -1,7 +1,135 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
+import { and, eq } from "drizzle-orm";
 import { validateGiftPricing } from "@/lib/pricing";
+import { ACCESS_TOKEN_COOKIE } from "@/lib/cookies";
+import { db } from "@/lib/db";
+import { transactions, wallets } from "@/lib/db/schema";
+import { verifyAccessToken } from "@/lib/tokens";
+
+const BLOCKCHAIN_TX_HASH_REGEX = /^[a-fA-F0-9]{64}$/;
+
+export interface PendingSavingsTransactionInput {
+  type: "deposit" | "withdrawal";
+  amount: number;
+  currency: string;
+  blockchainTxHash: string;
+  walletId?: string;
+  reference?: string;
+  provider?: string;
+}
+
+/**
+ * Records an authenticated deposit or withdrawal before chain confirmation.
+ *
+ * The entry is stored with `status = "pending"` so the UI can reflect it
+ * immediately and the background verifier can reconcile it once the hash is
+ * confirmed on-chain.
+ */
+export async function recordPendingSavingsTransaction(
+  input: PendingSavingsTransactionInput,
+) {
+  const cookieStore = await cookies();
+  const accessToken = cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
+  const authPayload = accessToken ? await verifyAccessToken(accessToken) : null;
+
+  if (!authPayload) {
+    return { success: false, error: "Authentication required" };
+  }
+
+  const amount = Number(input.amount);
+  const currency = input.currency?.trim().toUpperCase();
+  const blockchainTxHash = input.blockchainTxHash?.trim();
+
+  if (input.type !== "deposit" && input.type !== "withdrawal") {
+    return { success: false, error: "Invalid transaction type" };
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { success: false, error: "Amount must be greater than zero" };
+  }
+  if (!currency) {
+    return { success: false, error: "Currency is required" };
+  }
+  if (!blockchainTxHash || !BLOCKCHAIN_TX_HASH_REGEX.test(blockchainTxHash)) {
+    return {
+      success: false,
+      error: "Valid 64-character blockchain transaction hash is required",
+    };
+  }
+
+  // Idempotency: a hash may only ever be recorded once. Replaying the same
+  // hash for the same user returns the existing row; a hash claimed by another
+  // user is rejected.
+  const existing = await db.query.transactions.findFirst({
+    where: eq(transactions.blockchainTxHash, blockchainTxHash),
+  });
+  if (existing) {
+    if (existing.userId !== authPayload.userId) {
+      return { success: false, error: "Transaction already exists" };
+    }
+    return { success: true, transaction: existing };
+  }
+
+  // Resolve the wallet that owns this pending transaction, ensuring any
+  // client-supplied wallet id actually belongs to the authenticated user.
+  let walletId = input.walletId;
+  if (walletId) {
+    const wallet = await db.query.wallets.findFirst({
+      where: and(
+        eq(wallets.id, walletId),
+        eq(wallets.userId, authPayload.userId),
+      ),
+    });
+    if (!wallet) {
+      return { success: false, error: "Wallet not found" };
+    }
+  } else {
+    const wallet = await db.query.wallets.findFirst({
+      where: and(
+        eq(wallets.userId, authPayload.userId),
+        eq(wallets.currency, currency),
+      ),
+    });
+    walletId = wallet?.id;
+  }
+
+  let transaction;
+  try {
+    const [inserted] = await db
+      .insert(transactions)
+      .values({
+        userId: authPayload.userId,
+        walletId,
+        type: input.type,
+        status: "pending",
+        amount,
+        currency,
+        blockchainTxHash,
+        reference: input.reference?.trim() || null,
+        provider: input.provider?.trim() || "soroban",
+      })
+      .returning();
+    transaction = inserted;
+  } catch (err: unknown) {
+    // A concurrent request may have inserted the same unique hash between our
+    // lookup and insert. Resolve it idempotently instead of surfacing an error.
+    const existingOnConflict = await db.query.transactions.findFirst({
+      where: eq(transactions.blockchainTxHash, blockchainTxHash),
+    });
+    if (existingOnConflict) {
+      if (existingOnConflict.userId !== authPayload.userId) {
+        return { success: false, error: "Transaction already exists" };
+      }
+      return { success: true, transaction: existingOnConflict };
+    }
+    throw err;
+  }
+
+  revalidatePath("/dashboard");
+  return { success: true, transaction };
+}
 
 /** Validates gift pricing and refreshes the dashboard after creation. */
 export async function createGift(formData: FormData) {
