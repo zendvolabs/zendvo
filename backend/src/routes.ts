@@ -63,6 +63,9 @@ import { POST as verifyDeletionOtpPost } from "./api/auth/verify-deletion-otp/ro
 // Users
 import { GET as resolveRecipientGet } from "./api/users/resolve/route";
 
+// Wallet
+import { GET as listBanksGet } from "./api/wallet/banks/route";
+
 // Upload
 import { POST as uploadImagePost } from "./api/upload/image/route";
 
@@ -123,6 +126,9 @@ apiRouter.post(
 
 // Users routes
 apiRouter.get("/api/users/resolve", makeExpressHandler(resolveRecipientGet));
+
+// Wallet routes
+apiRouter.get("/api/wallet/banks", makeExpressHandler(listBanksGet));
 
 // Upload routes
 apiRouter.post(
