@@ -69,6 +69,9 @@ import { POST as uploadImagePost } from "./api/upload/image/route";
 // Gifts
 import { POST as giftAppreciatePost } from "./api/gifts/appreciate/route";
 
+// Wallet
+import { DELETE as bankAccountDelete } from "./api/wallet/banks/route";
+
 export const apiRouter = Router();
 
 // Gifts routes
@@ -123,6 +126,12 @@ apiRouter.post(
 
 // Users routes
 apiRouter.get("/api/users/resolve", makeExpressHandler(resolveRecipientGet));
+
+// Wallet routes
+apiRouter.delete(
+  "/api/wallet/banks/:id",
+  makeExpressHandler(bankAccountDelete),
+);
 
 // Upload routes
 apiRouter.post(
