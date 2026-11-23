@@ -126,9 +126,9 @@ function readRawBody(req: Request, maxBytes?: number): Promise<Buffer> {
     let settled = false;
 
     const cleanup = () => {
-      req.removeListener("data", onData);
-      req.removeListener("end", onEnd);
-      req.removeListener("error", onError);
+      req.removeListener?.("data", onData);
+      req.removeListener?.("end", onEnd);
+      req.removeListener?.("error", onError);
     };
 
     const onData = (chunk: Buffer) => {
@@ -140,7 +140,7 @@ function readRawBody(req: Request, maxBytes?: number): Promise<Buffer> {
       if (maxBytes !== undefined && receivedBytes > maxBytes) {
         settled = true;
         cleanup();
-        req.pause();
+        req.pause?.();
         reject(new RequestBodyTooLargeError());
         return;
       }
