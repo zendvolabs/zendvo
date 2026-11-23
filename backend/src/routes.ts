@@ -69,7 +69,13 @@ import { POST as uploadImagePost } from "./api/upload/image/route";
 // Gifts
 import { POST as giftAppreciatePost } from "./api/gifts/appreciate/route";
 
+// Wallet
+import { DELETE as walletBankDelete } from "./api/wallet/banks/route";
+
 export const apiRouter = Router();
+
+// Wallet routes
+apiRouter.delete("/api/wallet/banks/:id", makeExpressHandler(walletBankDelete));
 
 // Gifts routes
 apiRouter.post(
