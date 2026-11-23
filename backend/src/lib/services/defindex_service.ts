@@ -1,4 +1,5 @@
 import { DefindexSDK, SupportedNetworks } from "@defindex/sdk";
+import { Networks, rpc, TransactionBuilder } from "@stellar/stellar-sdk";
 
 export interface DepositTransaction {
   xdr: string;
@@ -36,21 +37,23 @@ export async function buildDepositTransaction(options: {
     supportedNetwork,
   );
 
-  const result = response as typeof response & {
-    fee?: string | number;
-    resourceFee?: string | number;
-    simulation?: unknown;
-    transactionData?: { resourceFee?: string | number };
-  };
+  const result = response;
   if (!result.xdr) {
     throw new Error("DeFindex did not return an unsigned deposit transaction XDR");
   }
+  const networkPassphrase = network === "mainnet" ? Networks.PUBLIC : Networks.TESTNET;
+  const rpcUrl = process.env.SOROBAN_RPC_URL || process.env.STELLAR_RPC_URL;
+  if (!rpcUrl) throw new Error("SOROBAN_RPC_URL or STELLAR_RPC_URL must be configured");
+
+  const transaction = TransactionBuilder.fromXDR(result.xdr, networkPassphrase);
+  const simulation = await new rpc.Server(rpcUrl).simulateTransaction(transaction);
+  if ("error" in simulation && simulation.error) {
+    throw new Error(`Soroban deposit simulation failed: ${simulation.error}`);
+  }
   return {
     xdr: result.xdr,
-    fee: result.fee == null ? null : String(result.fee),
-    resourceFee: result.resourceFee == null && result.transactionData?.resourceFee == null
-      ? null
-      : String(result.resourceFee ?? result.transactionData?.resourceFee),
-    simulation: result.simulation ?? null,
+    fee: transaction.fee,
+    resourceFee: simulation.minResourceFee ?? null,
+    simulation: result.simulationResponse ?? null,
   };
 }

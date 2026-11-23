@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
 
   // Convert decimal USDC (7 decimals on Stellar) to integer base units without
   // floating point rounding. Reject precision beyond the asset's decimals.
-  const amount = String(parsed.data.amount).trim();
+  const amount = toDecimalString(parsed.data.amount);
   if (!/^\d+(?:\.\d{1,7})?$/.test(amount)) {
     return NextResponse.json({ error: "Amount must have at most 7 decimal places" }, { status: 400 });
   }
@@ -68,4 +68,18 @@ export async function POST(request: NextRequest) {
     console.error("[WALLET_DEPOSIT_ERROR]", error);
     return NextResponse.json({ error: "Failed to build deposit transaction" }, { status: 502 });
   }
+}
+
+/** Expands a finite number's shortest round-trip representation without rounding. */
+function toDecimalString(value: string | number): string {
+  const normalized = String(value).trim();
+  const match = /^([+-]?)(\d+)(?:\.(\d*))?(?:e([+-]?\d+))?$/i.exec(normalized);
+  if (!match || !match[4]) return normalized;
+
+  const [, sign, whole, fraction = "", exponentText] = match;
+  const digits = whole + fraction;
+  const decimalPosition = whole.length + Number(exponentText);
+  if (decimalPosition <= 0) return `${sign}0.${"0".repeat(-decimalPosition)}${digits}`;
+  if (decimalPosition >= digits.length) return `${sign}${digits}${"0".repeat(decimalPosition - digits.length)}`;
+  return `${sign}${digits.slice(0, decimalPosition)}.${digits.slice(decimalPosition)}`;
 }
