@@ -47,7 +47,7 @@ export async function buildDepositTransaction(options: {
 
   const transaction = TransactionBuilder.fromXDR(result.xdr, networkPassphrase);
   const simulation = await new rpc.Server(rpcUrl).simulateTransaction(transaction);
-  if ("error" in simulation && simulation.error) {
+  if (rpc.Api.isSimulationError(simulation)) {
     throw new Error(`Soroban deposit simulation failed: ${simulation.error}`);
   }
   return {
