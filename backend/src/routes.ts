@@ -69,6 +69,9 @@ import { POST as uploadImagePost } from "./api/upload/image/route";
 // Gifts
 import { POST as giftAppreciatePost } from "./api/gifts/appreciate/route";
 
+// Dashboard
+import { GET as dashboardGiftsGet } from "./api/dashboard/gifts/route";
+
 export const apiRouter = Router();
 
 // Gifts routes
@@ -77,6 +80,12 @@ apiRouter.post(
   makeExpressHandler(giftAppreciatePost),
 );
 apiRouter.post("/api/gifts/appreciate", makeExpressHandler(giftAppreciatePost));
+
+// Dashboard routes
+apiRouter.get(
+  "/api/dashboard/gifts",
+  makeExpressHandler(dashboardGiftsGet),
+);
 
 // Authentication routes
 apiRouter.post("/api/auth", makeExpressHandler(authPost));
