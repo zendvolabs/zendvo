@@ -42,6 +42,9 @@ export async function buildDepositTransaction(options: {
     simulation?: unknown;
     transactionData?: { resourceFee?: string | number };
   };
+  if (!result.xdr) {
+    throw new Error("DeFindex did not return an unsigned deposit transaction XDR");
+  }
   return {
     xdr: result.xdr,
     fee: result.fee == null ? null : String(result.fee),
