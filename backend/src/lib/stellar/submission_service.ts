@@ -28,6 +28,13 @@ export class SubmissionError extends Error {
     message: string,
     public readonly attempts: number,
     public readonly cause?: Error,
+    /**
+     * True when the network terminally rejected the envelope (status
+     * ERROR). Callers use this to distinguish a rejection that can never
+     * succeed from an unknown outcome (retries exhausted, RPC
+     * unreachable), which may still have landed on the network.
+     */
+    public readonly terminal: boolean = false,
   ) {
     super(message);
     this.name = "SubmissionError";
@@ -78,6 +85,34 @@ export function getEnvelopeSourceAccount(
   return transaction.source;
 }
 
+/**
+ * Returns the deterministic transaction hash of a parsed envelope as a
+ * 64-character hex string. The Stellar transaction hash is a pure
+ * function of the envelope and the network passphrase, so the hash the
+ * network reports for an accepted envelope is exactly this value. The
+ * API route uses it to persist a submission intent before the RPC call.
+ */
+export function getEnvelopeHash(
+  transaction: Transaction | FeeBumpTransaction,
+): string {
+  return transaction.hash().toString("hex");
+}
+
+/**
+ * Per-attempt RPC deadline. NOTE: `rpc.Server` in @stellar/stellar-sdk
+ * 14.6.1 accepts a `timeout` option but ignores it — the constructor
+ * only forwards `headers` to its HTTP client, which sets no timeout.
+ * The service therefore enforces its own deadline around each
+ * `sendTransaction` call instead of relying on the SDK option.
+ */
+export function getRpcTimeoutMs(): number {
+  const raw = Number.parseInt(
+    process.env.SOROBAN_RPC_TIMEOUT_MS ?? "",
+    10,
+  );
+  return Number.isFinite(raw) && raw > 0 ? raw : RPC_TIMEOUT_MS;
+}
+
 export interface SubmissionServiceOptions {
   /** Override the RPC server (used by tests to avoid network calls). */
   server?: Pick<rpc.Server, "sendTransaction">;
@@ -85,6 +120,12 @@ export interface SubmissionServiceOptions {
   maxAttempts?: number;
   /** Delay before the first retry; doubles after each attempt (default 500ms). */
   baseDelayMs?: number;
+  /**
+   * Per-attempt deadline in ms for one `sendTransaction` call (default
+   * `getRpcTimeoutMs()`). A call that exceeds it is treated as a
+   * transient failure so the retry loop can advance.
+   */
+  requestTimeoutMs?: number;
   /** Injectable clock for tests. */
   sleep?: (ms: number) => Promise<void>;
 }
@@ -105,6 +146,7 @@ export class SubmissionService {
   private readonly serverOverride?: Pick<rpc.Server, "sendTransaction">;
   private readonly maxAttempts: number;
   private readonly baseDelayMs: number;
+  private readonly requestTimeoutMs: number;
   private readonly sleep: (ms: number) => Promise<void>;
   private sharedServer: rpc.Server | null = null;
 
@@ -112,6 +154,8 @@ export class SubmissionService {
     this.serverOverride = options.server;
     this.maxAttempts = options.maxAttempts ?? MAX_SUBMISSION_ATTEMPTS;
     this.baseDelayMs = options.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
+    this.requestTimeoutMs =
+      options.requestTimeoutMs ?? getRpcTimeoutMs();
     this.sleep = options.sleep ?? defaultSleep;
   }
 
@@ -120,11 +164,38 @@ export class SubmissionService {
       return this.serverOverride;
     }
     if (!this.sharedServer) {
-      this.sharedServer = new rpc.Server(getRpcUrl(), {
-        timeout: RPC_TIMEOUT_MS,
-      });
+      // No `timeout` option here on purpose: the SDK ignores it (see
+      // getRpcTimeoutMs). The per-attempt deadline is enforced by
+      // withDeadline around each sendTransaction call instead.
+      this.sharedServer = new rpc.Server(getRpcUrl());
     }
     return this.sharedServer;
+  }
+
+  /**
+   * Rejects if `promise` does not settle within the per-attempt
+   * deadline, so a hung RPC node cannot stall the retry loop forever.
+   * The underlying call keeps running, but the service stops waiting
+   * for it and moves on to the next attempt.
+   */
+  private async withDeadline<T>(promise: Promise<T>): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(
+            new Error(
+              `Soroban RPC request timed out after ${this.requestTimeoutMs}ms`,
+            ),
+          );
+        }, this.requestTimeoutMs);
+      });
+      return await Promise.race([promise, timeout]);
+    } finally {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
+    }
   }
 
   /**
@@ -146,7 +217,9 @@ export class SubmissionService {
 
     for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
       try {
-        const response = await server.sendTransaction(transaction);
+        const response = await this.withDeadline(
+          server.sendTransaction(transaction),
+        );
 
         if (response.status === "PENDING" || response.status === "DUPLICATE") {
           // DUPLICATE means the network already holds this exact envelope.
@@ -159,10 +232,14 @@ export class SubmissionService {
           );
         } else {
           // ERROR: the network rejected the envelope; retrying the same
-          // XDR will not help.
+          // XDR will not help. Marked terminal so callers can tell a
+          // rejection that can never succeed apart from an unknown
+          // outcome (retries exhausted), which may still have landed.
           throw new SubmissionError(
             `Soroban RPC rejected the transaction: ${response.status}`,
             attempt,
+            undefined,
+            true,
           );
         }
       } catch (error) {

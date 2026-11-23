@@ -64,7 +64,7 @@ import { POST as verifyDeletionOtpPost } from "./api/auth/verify-deletion-otp/ro
 import { GET as resolveRecipientGet } from "./api/users/resolve/route";
 
 // Transactions
-import { POST as submitTransactionPost } from "./api/transactions/submit";
+import { POST as submitTransactionPost } from "@/api/transactions/submit";
 
 // Upload
 import { POST as uploadImagePost } from "./api/upload/image/route";

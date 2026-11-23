@@ -9,9 +9,10 @@ import {
 import {
   SubmissionError,
   SubmissionService,
+  getEnvelopeHash,
   getEnvelopeSourceAccount,
   parseSignedXdr,
-} from "../../../src/lib/stellar/submission_service";
+} from "@/lib/stellar/submission_service";
 
 /** Builds a real signed payment envelope for the given source keypair. */
 function buildSignedXdr(source: Keypair): string {
@@ -60,7 +61,7 @@ function buildFeeBumpXdr(
   return feeBump.toEnvelope().toXDR("base64");
 }
 
-describe("parseSignedXdr / getEnvelopeSourceAccount", () => {
+describe("parseSignedXdr / getEnvelopeSourceAccount / getEnvelopeHash", () => {
   it("parses a signed envelope and returns its source account", () => {
     const source = Keypair.random();
     const xdr = buildSignedXdr(source);
@@ -78,6 +79,24 @@ describe("parseSignedXdr / getEnvelopeSourceAccount", () => {
 
   it("throws on malformed XDR", () => {
     expect(() => parseSignedXdr("not-xdr")).toThrow();
+  });
+
+  it("returns a stable 64-char hex hash for a signed envelope", () => {
+    const source = Keypair.random();
+    const xdr = buildSignedXdr(source);
+    const hash = getEnvelopeHash(parseSignedXdr(xdr));
+    expect(hash).toMatch(/^[0-9a-f]{64}$/);
+    // Deterministic: parsing the same envelope again yields the same hash.
+    expect(getEnvelopeHash(parseSignedXdr(xdr))).toBe(hash);
+  });
+
+  it("returns a stable 64-char hex hash for a fee-bump envelope", () => {
+    const feeSource = Keypair.random();
+    const innerSource = Keypair.random();
+    const xdr = buildFeeBumpXdr(feeSource, innerSource);
+    const hash = getEnvelopeHash(parseSignedXdr(xdr));
+    expect(hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(getEnvelopeHash(parseSignedXdr(xdr))).toBe(hash);
   });
 });
 
@@ -102,6 +121,7 @@ describe("SubmissionService.submitXdrToNetwork", () => {
   function makeService(
     sendTransaction: jest.Mock,
     sleepDelays: number[] = [],
+    options: { requestTimeoutMs?: number; maxAttempts?: number } = {},
   ) {
     const sleep = jest.fn(async (ms: number) => {
       sleepDelays.push(ms);
@@ -109,6 +129,7 @@ describe("SubmissionService.submitXdrToNetwork", () => {
     const service = new SubmissionService({
       server: { sendTransaction } as any,
       sleep,
+      ...options,
     });
     return { service, sleep };
   }
@@ -217,7 +238,7 @@ describe("SubmissionService.submitXdrToNetwork", () => {
     expect(delays).toEqual([500, 1000, 2000, 4000]);
   });
 
-  it("does not retry when the network rejects the envelope", async () => {
+  it("does not retry when the network rejects the envelope and marks the error terminal", async () => {
     const xdr = buildSignedXdr(Keypair.random());
     const sendTransaction = jest.fn().mockResolvedValue({
       status: "ERROR",
@@ -228,11 +249,65 @@ describe("SubmissionService.submitXdrToNetwork", () => {
     const delays: number[] = [];
     const { service, sleep } = makeService(sendTransaction, delays);
 
+    let thrown: unknown;
+    try {
+      await service.submitXdrToNetwork(xdr);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(SubmissionError);
+    expect((thrown as SubmissionError).terminal).toBe(true);
+    expect(sendTransaction).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it("treats a hung RPC call as a transient failure and advances the retry loop", async () => {
+    const xdr = buildSignedXdr(Keypair.random());
+    // Never settles: without a per-attempt deadline this would hang the
+    // retry loop forever (the SDK `timeout` option is ignored).
+    const sendTransaction = jest.fn(() => new Promise(() => {}));
+    const delays: number[] = [];
+    const { service } = makeService(sendTransaction, delays, {
+      requestTimeoutMs: 10,
+      maxAttempts: 2,
+    });
+
     await expect(service.submitXdrToNetwork(xdr)).rejects.toThrow(
       SubmissionError,
     );
+    expect(sendTransaction).toHaveBeenCalledTimes(2);
+    expect(delays).toEqual([500]);
+  });
+
+  it("does not time out a slow call that settles within the deadline", async () => {
+    const xdr = buildSignedXdr(Keypair.random());
+    const sendTransaction = jest.fn(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(
+            () =>
+              resolve({
+                status: "PENDING",
+                hash: "slow-hash",
+                latestLedger: 1,
+                latestLedgerCloseTime: 1,
+              }),
+            30,
+          ),
+        ),
+    );
+    const { service } = makeService(sendTransaction, [], {
+      requestTimeoutMs: 500,
+    });
+
+    const result = await service.submitXdrToNetwork(xdr);
+
+    expect(result).toEqual({
+      hash: "slow-hash",
+      status: "pending",
+      attempts: 1,
+    });
     expect(sendTransaction).toHaveBeenCalledTimes(1);
-    expect(sleep).not.toHaveBeenCalled();
   });
 
   it("throws when no RPC URL is configured and no server is injected", async () => {
