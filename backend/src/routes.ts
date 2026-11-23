@@ -77,6 +77,9 @@ import { DELETE as bankAccountDelete } from "./api/wallet/banks/route";
 // Dashboard
 import { GET as dashboardGiftsGet } from "./api/dashboard/gifts/route";
 
+// Savings
+import { POST as savingsTrustlinePost } from "./api/savings/trustline/route";
+
 export const apiRouter = Router();
 
 // Gifts routes
@@ -155,4 +158,10 @@ apiRouter.post(
   "/api/upload/image",
   limitUploadSize,
   makeExpressHandler(uploadImagePost),
+);
+
+// Savings routes
+apiRouter.post(
+  "/api/savings/trustline",
+  makeExpressHandler(savingsTrustlinePost),
 );
