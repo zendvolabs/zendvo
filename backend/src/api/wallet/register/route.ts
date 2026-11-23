@@ -1,19 +1,59 @@
 import { NextRequest, NextResponse } from "next/server";
 import { StrKey } from "@stellar/stellar-sdk";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { getAuthPayload } from "@/lib/auth-session";
 import { createProblemDetails } from "@/lib/api-utils";
 
 const PG_UNIQUE_VIOLATION = "23505";
+const WALLET_ADDRESS_CONSTRAINT = "users_stellar_address_unique";
 
-function isUniqueViolation(error: unknown): boolean {
-  return (
-    error !== null &&
-    typeof error === "object" &&
-    "code" in error &&
-    (error as { code?: unknown }).code === PG_UNIQUE_VIOLATION
+function isWalletAddressUniqueViolation(error: unknown): boolean {
+  const visited = new Set<object>();
+  let current: unknown = error;
+
+  while (
+    current !== null &&
+    typeof current === "object" &&
+    !visited.has(current)
+  ) {
+    visited.add(current);
+    const candidate = current as {
+      code?: unknown;
+      constraint?: unknown;
+      detail?: unknown;
+      cause?: unknown;
+    };
+
+    if (candidate.code === PG_UNIQUE_VIOLATION) {
+      const constraint =
+        typeof candidate.constraint === "string" ? candidate.constraint : "";
+      const detail =
+        typeof candidate.detail === "string" ? candidate.detail : "";
+
+      if (!constraint && !detail) {
+        return true;
+      }
+
+      return (
+        constraint === WALLET_ADDRESS_CONSTRAINT ||
+        detail.includes("stellar_address")
+      );
+    }
+
+    current = candidate.cause;
+  }
+
+  return false;
+}
+
+function walletAlreadyRegisteredResponse() {
+  return createProblemDetails(
+    "about:blank",
+    "Conflict",
+    409,
+    "Wallet already registered for this account",
   );
 }
 
@@ -89,12 +129,20 @@ export async function POST(request: NextRequest) {
       return alreadyRegisteredResponse(address);
     }
 
+    if (user.stellarAddress) {
+      return walletAlreadyRegisteredResponse();
+    }
+
     const [existingOwner] = await db
       .select({ id: users.id })
       .from(users)
       .where(eq(users.stellarAddress, address));
 
     if (existingOwner) {
+      if (existingOwner.id === payload.userId) {
+        return alreadyRegisteredResponse(address);
+      }
+
       return createProblemDetails(
         "about:blank",
         "Conflict",
@@ -107,19 +155,32 @@ export async function POST(request: NextRequest) {
       const updated = await db
         .update(users)
         .set({ stellarAddress: address, updatedAt: new Date() })
-        .where(eq(users.id, payload.userId))
+        .where(and(eq(users.id, payload.userId), isNull(users.stellarAddress)))
         .returning({ id: users.id });
 
       if (updated.length === 0) {
-        return createProblemDetails(
-          "about:blank",
-          "Not Found",
-          404,
-          "User not found",
-        );
+        const [refreshed] = await db
+          .select({ id: users.id, stellarAddress: users.stellarAddress })
+          .from(users)
+          .where(eq(users.id, payload.userId));
+
+        if (!refreshed) {
+          return createProblemDetails(
+            "about:blank",
+            "Not Found",
+            404,
+            "User not found",
+          );
+        }
+
+        if (refreshed.stellarAddress === address) {
+          return alreadyRegisteredResponse(address);
+        }
+
+        return walletAlreadyRegisteredResponse();
       }
     } catch (error: unknown) {
-      if (!isUniqueViolation(error)) {
+      if (!isWalletAddressUniqueViolation(error)) {
         throw error;
       }
 

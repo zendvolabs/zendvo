@@ -3,7 +3,7 @@ import { makeExpressHandler } from "./adapter";
 import {
   useSubmittedStellarAddressForSignature,
   validateRequestSignature,
-} from "./lib/middleware/signature_validator";
+} from "@/lib/middleware/signature_validator";
 
 // Streaming middleware to limit upload request size to 10MB without relying solely on Content-Length
 const limitUploadSize = (req: Request, res: Response, next: NextFunction) => {
@@ -73,7 +73,7 @@ import { POST as uploadImagePost } from "./api/upload/image/route";
 // Gifts
 import { POST as giftAppreciatePost } from "./api/gifts/appreciate/route";
 
-import { POST as walletRegisterPost } from "./api/wallet/register/route";
+import { POST as walletRegisterPost } from "@/api/wallet/register/route";
 
 export const apiRouter = Router();
 
