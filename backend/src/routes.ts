@@ -69,6 +69,9 @@ import { POST as uploadImagePost } from "./api/upload/image/route";
 // Gifts
 import { POST as giftAppreciatePost } from "./api/gifts/appreciate/route";
 
+// SEP-24 Webhook
+import { POST as sep24WebhookPost } from "./api/webhooks/sep24/route";
+
 export const apiRouter = Router();
 
 // Gifts routes
@@ -123,6 +126,9 @@ apiRouter.post(
 
 // Users routes
 apiRouter.get("/api/users/resolve", makeExpressHandler(resolveRecipientGet));
+
+// SEP-24 anchor webhook listener
+apiRouter.post("/api/webhooks/sep24", makeExpressHandler(sep24WebhookPost));
 
 // Upload routes
 apiRouter.post(
