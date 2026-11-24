@@ -76,6 +76,7 @@ import { DELETE as bankAccountDelete } from "./api/wallet/banks/route";
 
 // Dashboard
 import { GET as dashboardGiftsGet } from "./api/dashboard/gifts/route";
+import { GET as dashboardStatsGet } from "./api/dashboard/stats/route";
 
 // Savings
 import { POST as savingsTrustlinePost } from "./api/savings/trustline/route";
@@ -99,6 +100,10 @@ apiRouter.post("/api/gifts/appreciate", makeExpressHandler(giftAppreciatePost));
 apiRouter.get(
   "/api/dashboard/gifts",
   makeExpressHandler(dashboardGiftsGet),
+);
+apiRouter.get(
+  "/api/dashboard/stats",
+  makeExpressHandler(dashboardStatsGet),
 );
 
 // Authentication routes
