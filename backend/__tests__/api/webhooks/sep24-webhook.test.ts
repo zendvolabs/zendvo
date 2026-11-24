@@ -20,6 +20,11 @@ jest.mock("@/lib/stellar/webhook_signature", () => ({
 jest.mock("@/server/services/webhookService", () => ({
   processSep24Webhook: jest.fn(),
   enqueueWebhookRetry: jest.fn(),
+  // Pure helper — use the real implementation so the route's envelope
+  // unwrapping is exercised by these tests.
+  extractSep24Transaction:
+    jest.requireActual("@/server/services/webhookService")
+      .extractSep24Transaction,
 }));
 
 import { verifyWebhookSignature } from "@/lib/stellar/webhook_signature";
@@ -194,6 +199,47 @@ describe("POST /api/webhooks/sep24", () => {
     expect(res.status).toBe(200);
     expect(json.success).toBe(true);
     expect(json.message).toBe("Webhook processed");
+  });
+
+  // ── SEP-24 envelope ─────────────────────────────────────────────────────
+
+  it("unwraps the { transaction } envelope before processing", async () => {
+    process.env.SEP24_ANCHOR_SIGNING_KEY = "SIGNING_KEY";
+
+    mockVerify.mockReturnValue({ valid: true });
+    mockProcess.mockResolvedValue({ processed: true });
+
+    const res = await POST(makeRequest({ transaction: SAMPLE_PAYLOAD }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    // The service receives the transaction itself, not the envelope.
+    expect(mockProcess).toHaveBeenCalledWith(SAMPLE_PAYLOAD);
+    // Signature verification still ran over the untouched raw body.
+    expect(mockVerify.mock.calls[0][2]).toBe(
+      JSON.stringify({ transaction: SAMPLE_PAYLOAD }),
+    );
+  });
+
+  it("enqueues the unwrapped transaction when an enveloped callback fails", async () => {
+    process.env.SEP24_ANCHOR_SIGNING_KEY = "SIGNING_KEY";
+
+    mockVerify.mockReturnValue({ valid: true });
+    mockProcess.mockResolvedValue({
+      processed: false,
+      error: "Missing transaction id in payload",
+    });
+    mockEnqueue.mockResolvedValue(undefined as never);
+
+    const res = await POST(makeRequest({ transaction: SAMPLE_PAYLOAD }));
+    const json = await res.json();
+
+    expect(res.status).toBe(422);
+    expect(mockEnqueue).toHaveBeenCalledWith(
+      "sep24_transaction",
+      SAMPLE_PAYLOAD,
+      "Missing transaction id in payload",
+    );
   });
 
   // ── Processing failure ──────────────────────────────────────────────────

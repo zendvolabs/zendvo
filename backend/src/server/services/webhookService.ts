@@ -5,7 +5,7 @@ import {
   notifications,
   webhookRetryQueue,
 } from "@/lib/db/schema";
-import { eq, and, lte, asc } from "drizzle-orm";
+import { eq, and, lte, asc, sql, inArray, or, isNull, lt } from "drizzle-orm";
 
 /**
  * SEP-24 transaction status values as defined in the specification.
@@ -45,7 +45,12 @@ export interface Sep24TransactionPayload {
   amount_in?: string;
   amount_out?: string;
   amount_fee?: string;
-  asset_code: string;
+  /**
+   * SEP-24 transaction objects do not require `asset_code` (it is an
+   * optional extension). The wallet currency is resolved from the matched
+   * internal transaction instead; a supplied value is validated against it.
+   */
+  asset_code?: string;
   account?: string;
   memo?: string;
   memo_type?: string;
@@ -55,6 +60,34 @@ export interface Sep24TransactionPayload {
   completed_at?: string;
   updated_at?: string;
   [key: string]: unknown;
+}
+
+/**
+ * The shape of a SEP-24 anchor callback body: the transaction is wrapped
+ * in a `transaction` envelope object. Bare transactions (no envelope) are
+ * also accepted for forwards compatibility.
+ * See: https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0024.md
+ */
+export interface Sep24TransactionEnvelope {
+  transaction: Sep24TransactionPayload;
+  [key: string]: unknown;
+}
+
+/**
+ * Extracts the transaction from a parsed SEP-24 callback body, unwrapping
+ * the `{"transaction": {...}}` envelope when present. Returns the body
+ * unchanged when it already is a bare transaction.
+ */
+export function extractSep24Transaction(
+  body: unknown,
+): Sep24TransactionPayload {
+  if (body && typeof body === "object" && "transaction" in body) {
+    const transaction = (body as Sep24TransactionEnvelope).transaction;
+    if (transaction && typeof transaction === "object") {
+      return transaction;
+    }
+  }
+  return body as Sep24TransactionPayload;
 }
 
 /**
@@ -77,6 +110,58 @@ function mapSep24StatusToInternal(
       return "submitted";
   }
 }
+
+/**
+ * Internal transaction lifecycle order. `completed` and `failed` are both
+ * terminal (rank 2): a transaction must never move backwards along this
+ * order, so a stale retry or a redelivered older callback cannot regress
+ * a newer state.
+ */
+type InternalTransactionStatus = "pending" | "submitted" | "completed" | "failed";
+
+const INTERNAL_STATUS_RANK: Record<InternalTransactionStatus, number> = {
+  pending: 0,
+  submitted: 1,
+  completed: 2,
+  failed: 2,
+};
+
+/**
+ * Statuses a transaction may currently hold for a transition to `next` to
+ * be applied. A refund is the one legitimate move out of `completed`
+ * (it lands on `failed`); every other backwards move is stale and must be
+ * dropped, not retried.
+ */
+function allowedPredecessorsFor(
+  current: InternalTransactionStatus,
+  next: InternalTransactionStatus,
+  sep24Status: Sep24TransactionStatus,
+): InternalTransactionStatus[] | null {
+  if (next === current) {
+    // Idempotent re-delivery: already applied, nothing to do.
+    return [];
+  }
+  const isRefundAfterCompletion =
+    current === "completed" && sep24Status === "refunded";
+  const isForward =
+    INTERNAL_STATUS_RANK[next] > INTERNAL_STATUS_RANK[current];
+  if (!isForward && !isRefundAfterCompletion) {
+    return null;
+  }
+  if (next === "failed") {
+    return isRefundAfterCompletion
+      ? ["pending", "submitted", "completed"]
+      : ["pending", "submitted"];
+  }
+  if (next === "completed") {
+    return ["pending", "submitted"];
+  }
+  // next === "submitted"
+  return ["pending"];
+}
+
+/** The client passed to a `db.transaction` callback. */
+type TransactionClient = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
  * Creates a user-friendly notification message based on the SEP-24 event.
@@ -148,14 +233,20 @@ async function findTransactionByAnchorId(anchorTxId: string) {
  *
  * Steps:
  * 1. Find the matching internal transaction by anchor transaction ID
- * 2. Update the transaction status
- * 3. Update the wallet balance for completed deposits
- * 4. Create a notification for the user
+ * 2. Resolve the wallet currency from the matched transaction (a supplied
+ *    `asset_code` is validated against it, never trusted blindly)
+ * 3. Reject stale callbacks that would move the transaction backwards
+ *    (a repeated delivery of the current status is an idempotent no-op)
+ * 4. Inside one database transaction: claim the transition with a
+ *    conditional status update (only one concurrent worker can win it),
+ *    apply the wallet balance change, and insert the notification — so a
+ *    completed transaction's effects are committed exactly once
  */
 export async function processSep24Webhook(
   payload: Sep24TransactionPayload,
 ): Promise<{ processed: boolean; error?: string }> {
-  const { id: anchorTxId, kind, status, amount_in, asset_code } = payload;
+  const { id: anchorTxId, kind, status, amount_in, amount_out, asset_code } =
+    payload;
 
   if (!anchorTxId) {
     return { processed: false, error: "Missing transaction id in payload" };
@@ -184,101 +275,161 @@ export async function processSep24Webhook(
     return { processed: true };
   }
 
+  // Resolve the wallet currency from the matched transaction. SEP-24 does
+  // not require asset_code on the callback, so a missing value is fine;
+  // a supplied value that disagrees with the transaction is a data error.
+  const currency = internalTx.currency;
+  if (!currency) {
+    return {
+      processed: false,
+      error: `Internal transaction ${internalTx.id} has no currency`,
+    };
+  }
+  if (asset_code && asset_code !== currency) {
+    return {
+      processed: false,
+      error:
+        `Asset mismatch for transaction ${anchorTxId}: callback asset_code ` +
+        `"${asset_code}" does not match transaction currency "${currency}"`,
+    };
+  }
+
   const newStatus = mapSep24StatusToInternal(status);
+  const currentStatus = internalTx.status as InternalTransactionStatus;
 
-  // Update the transaction status
-  await db
-    .update(transactions)
-    .set({ status: newStatus })
-    .where(eq(transactions.id, internalTx.id));
-
-  // For completed deposits, credit the user's wallet
-  if (status === "completed" && kind === "deposit" && amount_in) {
-    const amount = parseFloat(amount_in);
-    if (!isNaN(amount) && amount > 0) {
-      await creditWallet(internalTx.userId, asset_code, amount);
-    }
+  // Forward-only transition check (read-side fast path; the conditional
+  // update inside the transaction is the authoritative claim).
+  const predecessors = allowedPredecessorsFor(currentStatus, newStatus, status);
+  if (predecessors === null) {
+    console.warn(
+      `[SEP24_WEBHOOK] Ignoring stale ${status} callback for ${anchorTxId}: ` +
+        `transaction is already ${currentStatus}`,
+    );
+    return { processed: true };
+  }
+  if (predecessors.length === 0) {
+    // Idempotent re-delivery of the current status: already applied.
+    return { processed: true };
   }
 
-  // For completed withdrawals, debit the user's wallet
-  if (status === "completed" && kind === "withdrawal" && amount_in) {
-    const amount = parseFloat(amount_in);
-    if (!isNaN(amount) && amount > 0) {
-      await debitWallet(internalTx.userId, asset_code, amount);
-    }
-  }
+  // The amount actually delivered to the user. SEP-24 defines amount_out
+  // as the settled amount; amount_in is only a fallback when the anchor
+  // did not report one. Withdrawals keep using amount_in (unchanged).
+  const settledAmount =
+    kind === "deposit" ? (amount_out ?? amount_in) : amount_in;
 
-  // Create a notification for the user
-  const { title, message } = buildNotification(kind, status, asset_code, amount_in);
-  await db.insert(notifications).values({
-    userId: internalTx.userId,
-    type: `sep24_${kind}_${status}`,
-    title,
-    message,
+  return db.transaction(async (tx) => {
+    // Concurrency-safe completion claim: only proceed if the transaction
+    // still holds a status this transition may move from. A concurrent
+    // worker that already applied this (or a newer) transition makes this
+    // update match zero rows, and we skip the balance change and
+    // notification entirely — the effects are committed exactly once.
+    const claimed = await tx
+      .update(transactions)
+      .set({ status: newStatus })
+      .where(
+        and(
+          eq(transactions.id, internalTx.id),
+          inArray(transactions.status, predecessors),
+        ),
+      )
+      .returning({ id: transactions.id });
+
+    if (claimed.length === 0) {
+      return { processed: true };
+    }
+
+    // For completed deposits, credit the user's wallet with the settled
+    // (delivered) amount. The status is only marked completed as part of
+    // this same transaction, after the balance change is queued here — a
+    // failure anywhere rolls the whole thing back for a clean retry.
+    if (status === "completed" && kind === "deposit" && settledAmount) {
+      const amount = parseFloat(settledAmount);
+      if (!isNaN(amount) && amount > 0) {
+        await creditWallet(tx, internalTx.userId, currency, amount);
+      }
+    }
+
+    // For completed withdrawals, debit the user's wallet
+    if (status === "completed" && kind === "withdrawal" && settledAmount) {
+      const amount = parseFloat(settledAmount);
+      if (!isNaN(amount) && amount > 0) {
+        await debitWallet(tx, internalTx.userId, currency, amount);
+      }
+    }
+
+    // Create a notification for the user
+    const { title, message } = buildNotification(
+      kind,
+      status,
+      currency,
+      settledAmount,
+    );
+    await tx.insert(notifications).values({
+      userId: internalTx.userId,
+      type: `sep24_${kind}_${status}`,
+      title,
+      message,
+    });
+
+    return { processed: true };
   });
-
-  return { processed: true };
 }
 
 /**
  * Credits a user's wallet with the specified amount of an asset.
+ *
+ * The balance is computed database-side (`balance + amount`) inside a
+ * single upsert, so concurrent callbacks for different transactions on
+ * the same wallet cannot lose each other's update, and two concurrent
+ * first credits cannot create two wallet rows: the
+ * `wallet_user_currency_key` unique constraint on (user_id, currency)
+ * collapses them into one row.
  */
 async function creditWallet(
+  tx: TransactionClient,
   userId: string,
   currency: string,
   amount: number,
 ): Promise<void> {
-  const existingWallet = await db
-    .select()
-    .from(wallets)
-    .where(and(eq(wallets.userId, userId), eq(wallets.currency, currency)))
-    .limit(1);
-
-  if (existingWallet.length > 0) {
-    const current = existingWallet[0];
-    await db
-      .update(wallets)
-      .set({
-        balance: (Number(current.balance) || 0) + amount,
-        updatedAt: new Date(),
-      })
-      .where(eq(wallets.id, current.id));
-  } else {
-    await db.insert(wallets).values({
+  await tx
+    .insert(wallets)
+    .values({
       userId,
       currency,
       balance: amount,
+    })
+    .onConflictDoUpdate({
+      target: [wallets.userId, wallets.currency],
+      set: {
+        balance: sql`${wallets.balance} + ${amount}`,
+        updatedAt: new Date(),
+      },
     });
-  }
 }
 
 /**
  * Debits a user's wallet for the specified amount of an asset.
+ *
+ * The balance is computed database-side (`balance - amount`) in a single
+ * update, so concurrent callbacks cannot lose each other's update.
  */
 async function debitWallet(
+  tx: TransactionClient,
   userId: string,
   currency: string,
   amount: number,
 ): Promise<void> {
-  const existingWallet = await db
-    .select()
-    .from(wallets)
-    .where(and(eq(wallets.userId, userId), eq(wallets.currency, currency)))
-    .limit(1);
-
-  if (existingWallet.length > 0) {
-    const current = existingWallet[0];
-    const newBalance = (Number(current.balance) || 0) - amount;
-    await db
-      .update(wallets)
-      .set({
-        balance: newBalance,
-        updatedAt: new Date(),
-      })
-      .where(eq(wallets.id, current.id));
-  }
-  // If wallet doesn't exist, the debit is a no-op (insufficient funds scenario
-  // should be handled upstream)
+  await tx
+    .update(wallets)
+    .set({
+      balance: sql`${wallets.balance} - ${amount}`,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(wallets.userId, userId), eq(wallets.currency, currency)));
+  // If the wallet doesn't exist, the update matches zero rows and the
+  // debit is a no-op (insufficient funds scenario should be handled
+  // upstream)
 }
 
 // ── Webhook retry queue ──────────────────────────────────────────────────────
@@ -287,6 +438,11 @@ async function debitWallet(
 export const WEBHOOK_RETRY_BASE_DELAY_MS = 60_000;
 /** Upper bound for the exponential backoff delay (1 hour). */
 export const WEBHOOK_RETRY_MAX_DELAY_MS = 3_600_000;
+/**
+ * How long a `claimDue` lease is held before a crashed worker's event
+ * becomes claimable again (10 minutes).
+ */
+export const WEBHOOK_RETRY_CLAIM_TTL_MS = 600_000;
 /** Default number of queued events processed per sweep. */
 export const WEBHOOK_RETRY_BATCH_SIZE = 10;
 /** Default maximum attempts before a queued event is dropped. */
@@ -327,7 +483,14 @@ export interface WebhookRetryStore {
     nextAttemptAt: Date;
     lastError: string;
   }): Promise<WebhookRetryEvent>;
-  listDue(now: Date, limit: number): Promise<WebhookRetryEvent[]>;
+  /**
+   * Atomically claims up to `limit` due events for this worker and
+   * returns them. Claimed events are invisible to other workers until
+   * the claim is released (`recordFailure`) or expires
+   * (`WEBHOOK_RETRY_CLAIM_TTL_MS`); a successful event is `remove`d.
+   * A process-local overlap guard is not a substitute for this claim.
+   */
+  claimDue(now: Date, limit: number): Promise<WebhookRetryEvent[]>;
   remove(id: string): Promise<void>;
   recordFailure(
     id: string,
@@ -360,13 +523,34 @@ export const drizzleWebhookRetryStore: WebhookRetryStore = {
     return toWebhookRetryEvent(row);
   },
 
-  async listDue(now, limit) {
-    const rows = await db
-      .select()
+  /**
+   * Atomic cross-process claim: a single UPDATE stamps `claimedAt` on
+   * the due rows it returns, so two backend processes sweeping at the
+   * same time can never receive the same event. Rows whose claim is
+   * older than the TTL are treated as abandoned (crashed worker) and
+   * become claimable again.
+   */
+  async claimDue(now, limit) {
+    const staleBefore = new Date(now.getTime() - WEBHOOK_RETRY_CLAIM_TTL_MS);
+    const claimable = db
+      .select({ id: webhookRetryQueue.id })
       .from(webhookRetryQueue)
-      .where(lte(webhookRetryQueue.nextAttemptAt, now))
+      .where(
+        and(
+          lte(webhookRetryQueue.nextAttemptAt, now),
+          or(
+            isNull(webhookRetryQueue.claimedAt),
+            lt(webhookRetryQueue.claimedAt, staleBefore),
+          ),
+        ),
+      )
       .orderBy(asc(webhookRetryQueue.nextAttemptAt))
       .limit(limit);
+    const rows = await db
+      .update(webhookRetryQueue)
+      .set({ claimedAt: now, updatedAt: now })
+      .where(inArray(webhookRetryQueue.id, claimable))
+      .returning();
     return rows.map(toWebhookRetryEvent);
   },
 
@@ -377,7 +561,9 @@ export const drizzleWebhookRetryStore: WebhookRetryStore = {
   async recordFailure(id, update) {
     await db
       .update(webhookRetryQueue)
-      .set({ ...update, updatedAt: new Date() })
+      // Release the claim so the event can be claimed again once its
+      // next attempt is due.
+      .set({ ...update, claimedAt: null, updatedAt: new Date() })
       .where(eq(webhookRetryQueue.id, id));
   },
 };
@@ -465,7 +651,7 @@ export async function processWebhookRetryQueue(
   const batchSize = deps.batchSize ?? WEBHOOK_RETRY_BATCH_SIZE;
 
   const startedAt = now();
-  const due = await store.listDue(startedAt, batchSize);
+  const due = await store.claimDue(startedAt, batchSize);
 
   let succeeded = 0;
   let failed = 0;
@@ -488,10 +674,13 @@ export async function processWebhookRetryQueue(
           `[WEBHOOK_RETRY] Dropping event ${event.id} (${event.eventType}) after ${nextRetryCount} attempts: ${message}`,
         );
       } else {
+        // The backoff starts when this attempt failed, not when the
+        // sweep started — a slow attempt must not be retried immediately.
+        const failedAt = now();
         await store.recordFailure(event.id, {
           retryCount: nextRetryCount,
           nextAttemptAt: new Date(
-            startedAt.getTime() + computeBackoffDelayMs(nextRetryCount),
+            failedAt.getTime() + computeBackoffDelayMs(nextRetryCount),
           ),
           lastError: message,
         });

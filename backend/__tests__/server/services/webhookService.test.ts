@@ -1,19 +1,53 @@
 import {
   computeBackoffDelayMs,
   enqueueWebhookRetry,
+  extractSep24Transaction,
   handleQueuedWebhookEvent,
   processSep24Webhook,
   processWebhookRetryQueue,
   WEBHOOK_RETRY_BASE_DELAY_MS,
+  WEBHOOK_RETRY_CLAIM_TTL_MS,
   WEBHOOK_RETRY_MAX_DELAY_MS,
   type WebhookRetryEvent,
   type WebhookRetryStore,
 } from "@/server/services/webhookService";
+import { db } from "@/lib/db";
+import { wallets, notifications } from "@/lib/db/schema";
+import { SQL } from "drizzle-orm";
+
+// The webhook service talks to Postgres through the module-level `db`.
+// Tests replace it with chain mocks (same pattern as otpService.test.ts);
+// `transaction` runs its callback against the same mock object.
+jest.mock("@/lib/db", () => {
+  const db: {
+    select: jest.Mock;
+    update: jest.Mock;
+    insert: jest.Mock;
+    delete: jest.Mock;
+    transaction: jest.Mock;
+  } = {
+    select: jest.fn(),
+    update: jest.fn(),
+    insert: jest.fn(),
+    delete: jest.fn(),
+    transaction: jest.fn(async (fn: (tx: unknown) => unknown) => fn(db)),
+  };
+  return { db };
+});
+
+const mockDb = db as unknown as {
+  select: jest.Mock;
+  update: jest.Mock;
+  insert: jest.Mock;
+  transaction: jest.Mock;
+};
 
 /** In-memory fake of the WebhookRetryQueue table for processor tests. */
 class InMemoryWebhookRetryStore implements WebhookRetryStore {
   events: WebhookRetryEvent[] = [];
   private seq = 0;
+  /** event id -> claim timestamp (mirrors the `claimed_at` lease column) */
+  private claims = new Map<string, Date>();
 
   async enqueue(input: {
     eventType: string;
@@ -33,17 +67,33 @@ class InMemoryWebhookRetryStore implements WebhookRetryStore {
     return event;
   }
 
-  async listDue(now: Date, limit: number): Promise<WebhookRetryEvent[]> {
-    return this.events
-      .filter((e) => e.nextAttemptAt <= now)
+  /**
+   * Atomically claims due events: an event is handed out only if it is
+   * due and unclaimed (or its claim is older than the TTL, i.e. its
+   * worker crashed). Claimed events stay claimed until `remove` or
+   * `recordFailure` releases them.
+   */
+  async claimDue(now: Date, limit: number): Promise<WebhookRetryEvent[]> {
+    const staleBefore = now.getTime() - WEBHOOK_RETRY_CLAIM_TTL_MS;
+    const due = this.events
+      .filter((e) => {
+        if (e.nextAttemptAt > now) return false;
+        const claimedAt = this.claims.get(e.id);
+        return !claimedAt || claimedAt.getTime() < staleBefore;
+      })
       .sort(
         (a, b) => a.nextAttemptAt.getTime() - b.nextAttemptAt.getTime(),
       )
       .slice(0, limit);
+    for (const event of due) {
+      this.claims.set(event.id, now);
+    }
+    return due;
   }
 
   async remove(id: string): Promise<void> {
     this.events = this.events.filter((e) => e.id !== id);
+    this.claims.delete(id);
   }
 
   async recordFailure(
@@ -53,6 +103,8 @@ class InMemoryWebhookRetryStore implements WebhookRetryStore {
     const event = this.events.find((e) => e.id === id);
     if (event) {
       Object.assign(event, update, { updatedAt: new Date() });
+      // Release the claim so the event can be claimed again once due.
+      this.claims.delete(id);
     }
   }
 }
@@ -350,5 +402,312 @@ describe("processSep24Webhook validation", () => {
       processed: false,
       error: "Missing transaction status in payload",
     });
+  });
+});
+
+describe("extractSep24Transaction", () => {
+  it("unwraps the { transaction } envelope", () => {
+    const tx = { id: "anchor-tx-1", kind: "deposit", status: "completed" };
+    expect(extractSep24Transaction({ transaction: tx })).toEqual(tx);
+  });
+
+  it("passes a bare transaction through unchanged", () => {
+    const tx = { id: "anchor-tx-1", kind: "deposit", status: "completed" };
+    expect(extractSep24Transaction(tx)).toEqual(tx);
+  });
+
+  it("passes the body through when transaction is not an object", () => {
+    const body = { transaction: null, id: "anchor-tx-1" };
+    expect(extractSep24Transaction(body)).toEqual(body);
+  });
+});
+
+describe("processSep24Webhook — wallet effects and transitions", () => {
+  const INTERNAL_TX = {
+    id: "internal-tx-1",
+    userId: "user-1",
+    walletId: null,
+    type: "deposit",
+    status: "submitted",
+    amount: 100,
+    currency: "USDC",
+    reference: "anchor-tx-1",
+    provider: null,
+    blockchainTxHash: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const COMPLETED_DEPOSIT = {
+    id: "anchor-tx-1",
+    kind: "deposit" as const,
+    status: "completed" as const,
+    amount_in: "100.00",
+    amount_out: "99.50",
+    amount_fee: "0.50",
+    asset_code: "USDC",
+  };
+
+  /**
+   * Configures the db chain mocks for one processSep24Webhook call:
+   * - `db.select` resolves the matched internal transaction (or none)
+   * - the conditional status update inside the transaction claims the
+   *   transition unless `claimWon` is false
+   * - `db.insert` resolves for wallet upserts and notifications
+   */
+  function setupDbMocks(options: {
+    transactionRow?: Record<string, unknown> | null;
+    claimWon?: boolean;
+  } = {}) {
+    const onConflictDoUpdateMock = jest.fn().mockResolvedValue(undefined);
+    const valuesMock = jest.fn().mockReturnValue({
+      onConflictDoUpdate: onConflictDoUpdateMock,
+    });
+    mockDb.insert.mockReturnValue({ values: valuesMock });
+
+    const returningMock = jest
+      .fn()
+      .mockResolvedValue(
+        options.claimWon === false ? [] : [{ id: "internal-tx-1" }],
+      );
+    const whereResult = Promise.resolve(undefined) as Promise<undefined> & {
+      returning: jest.Mock;
+    };
+    whereResult.returning = returningMock;
+    const whereMock = jest.fn().mockReturnValue(whereResult);
+    const setMock = jest.fn().mockReturnValue({ where: whereMock });
+    mockDb.update.mockReturnValue({ set: setMock });
+
+    const row =
+      options.transactionRow === undefined
+        ? INTERNAL_TX
+        : options.transactionRow;
+    mockDb.select.mockReturnValue({
+      from: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnValue({
+          limit: jest.fn().mockResolvedValue(row ? [row] : []),
+        }),
+      }),
+    });
+
+    return { valuesMock, onConflictDoUpdateMock, setMock, returningMock };
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("credits a completed deposit with amount_out, not amount_in", async () => {
+    const { valuesMock, onConflictDoUpdateMock } = setupDbMocks();
+
+    const result = await processSep24Webhook(COMPLETED_DEPOSIT);
+
+    expect(result).toEqual({ processed: true });
+    expect(mockDb.insert).toHaveBeenCalledWith(wallets);
+    // 100 in / 99.50 out: the wallet is credited the delivered 99.50.
+    expect(valuesMock.mock.calls[0][0]).toEqual({
+      userId: "user-1",
+      currency: "USDC",
+      balance: 99.5,
+    });
+    // Upsert on (user_id, currency) with a database-side balance update.
+    expect(onConflictDoUpdateMock).toHaveBeenCalledTimes(1);
+    const upsert = onConflictDoUpdateMock.mock.calls[0][0];
+    expect(upsert.target).toHaveLength(2);
+    expect(upsert.set.balance).toBeInstanceOf(SQL);
+    // Notification still uses the settled amount.
+    expect(valuesMock.mock.calls[1][0].message).toContain("99.50 USDC");
+  });
+
+  it("falls back to amount_in when amount_out is absent", async () => {
+    const { amount_out: _out, ...noOut } = COMPLETED_DEPOSIT;
+    const { valuesMock } = setupDbMocks();
+
+    const result = await processSep24Webhook(noOut);
+
+    expect(result).toEqual({ processed: true });
+    expect(valuesMock.mock.calls[0][0].balance).toBe(100);
+  });
+
+  it("does not re-credit when the transaction is already completed", async () => {
+    setupDbMocks({
+      transactionRow: { ...INTERNAL_TX, status: "completed" },
+    });
+
+    const result = await processSep24Webhook(COMPLETED_DEPOSIT);
+
+    expect(result).toEqual({ processed: true });
+    expect(mockDb.transaction).not.toHaveBeenCalled();
+    expect(mockDb.insert).not.toHaveBeenCalled();
+  });
+
+  it("ignores a stale callback that would regress completed to submitted", async () => {
+    setupDbMocks({
+      transactionRow: { ...INTERNAL_TX, status: "completed" },
+    });
+
+    const result = await processSep24Webhook({
+      ...COMPLETED_DEPOSIT,
+      status: "pending_anchor",
+    });
+
+    expect(result).toEqual({ processed: true });
+    expect(mockDb.transaction).not.toHaveBeenCalled();
+    expect(mockDb.insert).not.toHaveBeenCalled();
+  });
+
+  it("applies a refund after completion without crediting again", async () => {
+    const { setMock } = setupDbMocks({
+      transactionRow: { ...INTERNAL_TX, status: "completed" },
+    });
+
+    const result = await processSep24Webhook({
+      ...COMPLETED_DEPOSIT,
+      status: "refunded",
+    });
+
+    expect(result).toEqual({ processed: true });
+    expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+    expect(setMock.mock.calls[0][0]).toEqual({ status: "failed" });
+    expect(mockDb.insert).toHaveBeenCalledWith(notifications);
+    expect(mockDb.insert).not.toHaveBeenCalledWith(wallets);
+  });
+
+  it("resolves the wallet currency from the matched transaction when asset_code is missing", async () => {
+    const { asset_code: _code, ...noAsset } = COMPLETED_DEPOSIT;
+    const { valuesMock } = setupDbMocks();
+
+    const result = await processSep24Webhook(noAsset);
+
+    expect(result).toEqual({ processed: true });
+    expect(valuesMock.mock.calls[0][0]).toEqual({
+      userId: "user-1",
+      currency: "USDC",
+      balance: 99.5,
+    });
+  });
+
+  it("rejects a callback whose asset_code disagrees with the transaction", async () => {
+    setupDbMocks();
+
+    const result = await processSep24Webhook({
+      ...COMPLETED_DEPOSIT,
+      asset_code: "EUR",
+    });
+
+    expect(result.processed).toBe(false);
+    expect(result.error).toContain("Asset mismatch");
+    expect(mockDb.transaction).not.toHaveBeenCalled();
+    expect(mockDb.insert).not.toHaveBeenCalled();
+  });
+
+  it("skips the wallet credit and notification when another worker claims the transition first", async () => {
+    setupDbMocks({ claimWon: false });
+
+    const result = await processSep24Webhook(COMPLETED_DEPOSIT);
+
+    expect(result).toEqual({ processed: true });
+    // The claim attempt ran, but nothing was written.
+    expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+    expect(mockDb.insert).not.toHaveBeenCalled();
+  });
+
+  it("debits a completed withdrawal with database-side arithmetic", async () => {
+    const { setMock } = setupDbMocks();
+
+    const result = await processSep24Webhook({
+      id: "anchor-tx-1",
+      kind: "withdrawal",
+      status: "completed",
+      amount_in: "25.00",
+      asset_code: "USDC",
+    });
+
+    expect(result).toEqual({ processed: true });
+    const walletSet = setMock.mock.calls
+      .map((call) => call[0])
+      .find((set) => "balance" in set);
+    expect(walletSet).toBeDefined();
+    // The new balance is a SQL expression (balance - amount), not a
+    // value computed in JavaScript from an earlier read.
+    expect(walletSet.balance).toBeInstanceOf(SQL);
+    expect(mockDb.insert).not.toHaveBeenCalledWith(wallets);
+    expect(mockDb.insert).toHaveBeenCalledWith(notifications);
+  });
+
+  it("acknowledges an unknown anchor transaction without touching the database", async () => {
+    setupDbMocks({ transactionRow: null });
+
+    const result = await processSep24Webhook(COMPLETED_DEPOSIT);
+
+    expect(result).toEqual({ processed: true });
+    expect(mockDb.transaction).not.toHaveBeenCalled();
+    expect(mockDb.insert).not.toHaveBeenCalled();
+  });
+});
+
+describe("processWebhookRetryQueue — atomic claim and backoff timing", () => {
+  function dueEvent(overrides: Partial<Parameters<WebhookRetryStore["enqueue"]>[0]> = {}) {
+    return {
+      eventType: "sep24_transaction",
+      payload: { id: "anchor-tx-1" },
+      retryCount: 0,
+      maxRetries: 5,
+      nextAttemptAt: new Date(NOW.getTime() - 1000),
+      lastError: "failure",
+      ...overrides,
+    };
+  }
+
+  it("does not hand the same event to a second claim while the lease is held", async () => {
+    const store = new InMemoryWebhookRetryStore();
+    await store.enqueue(dueEvent());
+
+    expect(await store.claimDue(NOW, 10)).toHaveLength(1);
+    expect(await store.claimDue(NOW, 10)).toHaveLength(0);
+  });
+
+  it("makes a stale claim claimable again after the TTL", async () => {
+    const store = new InMemoryWebhookRetryStore();
+    await store.enqueue(dueEvent());
+
+    await store.claimDue(NOW, 10);
+    expect(await store.claimDue(NOW, 10)).toHaveLength(0);
+
+    const afterTtl = new Date(
+      NOW.getTime() + WEBHOOK_RETRY_CLAIM_TTL_MS + 1000,
+    );
+    expect(await store.claimDue(afterTtl, 10)).toHaveLength(1);
+  });
+
+  it("releases the claim on failure so the event can be claimed again when due", async () => {
+    const store = new InMemoryWebhookRetryStore();
+    await store.enqueue(dueEvent());
+    const handleEvent = jest.fn().mockRejectedValue(new Error("boom"));
+
+    await processWebhookRetryQueue({ store, handleEvent, now: () => NOW });
+
+    const [event] = store.events;
+    expect(event.retryCount).toBe(1);
+    // Not claimable before its next attempt...
+    expect(await store.claimDue(NOW, 10)).toHaveLength(0);
+    // ...but claimable once the backoff has elapsed.
+    expect(await store.claimDue(event.nextAttemptAt, 10)).toHaveLength(1);
+  });
+
+  it("starts the backoff when the attempt fails, not when the sweep started", async () => {
+    const store = new InMemoryWebhookRetryStore();
+    await store.enqueue(dueEvent());
+    const handleEvent = jest.fn().mockRejectedValue(new Error("slow failure"));
+    const failureAt = new Date(NOW.getTime() + 120_000);
+    let calls = 0;
+    const now = () => (++calls === 1 ? NOW : failureAt);
+
+    await processWebhookRetryQueue({ store, handleEvent, now });
+
+    const [event] = store.events;
+    expect(event.nextAttemptAt.getTime()).toBe(
+      failureAt.getTime() + computeBackoffDelayMs(1),
+    );
   });
 });

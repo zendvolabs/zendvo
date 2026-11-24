@@ -68,6 +68,17 @@ import { POST as uploadImagePost } from "./api/upload/image/route";
 
 // Gifts
 import { POST as giftAppreciatePost } from "./api/gifts/appreciate/route";
+import { POST as walletDepositPost } from "./api/wallet/deposit/route";
+import { validateRequestSignature } from "./lib/middleware/signature_validator";
+
+// Wallet
+import { DELETE as bankAccountDelete } from "./api/wallet/banks/route";
+
+// Dashboard
+import { GET as dashboardGiftsGet } from "./api/dashboard/gifts/route";
+
+// Savings
+import { POST as savingsTrustlinePost } from "./api/savings/trustline/route";
 
 // SEP-24 Webhook
 import { POST as sep24WebhookPost } from "./api/webhooks/sep24/route";
@@ -76,10 +87,22 @@ export const apiRouter = Router();
 
 // Gifts routes
 apiRouter.post(
+  "/api/wallet/deposit",
+  validateRequestSignature,
+  makeExpressHandler(walletDepositPost),
+);
+
+apiRouter.post(
   "/api/gifts/:id/appreciate",
   makeExpressHandler(giftAppreciatePost),
 );
 apiRouter.post("/api/gifts/appreciate", makeExpressHandler(giftAppreciatePost));
+
+// Dashboard routes
+apiRouter.get(
+  "/api/dashboard/gifts",
+  makeExpressHandler(dashboardGiftsGet),
+);
 
 // Authentication routes
 apiRouter.post("/api/auth", makeExpressHandler(authPost));
@@ -127,6 +150,12 @@ apiRouter.post(
 // Users routes
 apiRouter.get("/api/users/resolve", makeExpressHandler(resolveRecipientGet));
 
+// Wallet routes
+apiRouter.delete(
+  "/api/wallet/banks/:id",
+  makeExpressHandler(bankAccountDelete),
+);
+
 // SEP-24 anchor webhook listener
 apiRouter.post("/api/webhooks/sep24", makeExpressHandler(sep24WebhookPost));
 
@@ -135,4 +164,10 @@ apiRouter.post(
   "/api/upload/image",
   limitUploadSize,
   makeExpressHandler(uploadImagePost),
+);
+
+// Savings routes
+apiRouter.post(
+  "/api/savings/trustline",
+  makeExpressHandler(savingsTrustlinePost),
 );

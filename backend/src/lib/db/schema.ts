@@ -390,6 +390,16 @@ export const webhookRetryQueue = pgTable("WebhookRetryQueue", {
   maxRetries: integer("max_retries").default(5).notNull(),
   nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull(),
   lastError: text("last_error"),
+  /**
+   * Cross-process claim (lease) for the retry sweep: `claimDue` atomically
+   * stamps this when it hands an event to a worker, so two backend
+   * processes cannot process the same event. Cleared by `recordFailure`
+   * (so the event can be claimed again at its next attempt) and irrelevant
+   * once the row is removed. A claim older than
+   * `WEBHOOK_RETRY_CLAIM_TTL_MS` is treated as stale (crashed worker) and
+   * the event becomes claimable again.
+   */
+  claimedAt: timestamp("claimed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

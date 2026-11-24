@@ -4,6 +4,7 @@ import { verifyWebhookSignature } from "@/lib/stellar/webhook_signature";
 import {
   processSep24Webhook,
   enqueueWebhookRetry,
+  extractSep24Transaction,
   type Sep24TransactionPayload,
 } from "@/server/services/webhookService";
 
@@ -31,7 +32,10 @@ export async function POST(request: NextRequest) {
 
     let payload: Sep24TransactionPayload;
     try {
-      payload = JSON.parse(rawBody) as Sep24TransactionPayload;
+      // The anchor wraps the transaction in a {"transaction": {...}}
+      // envelope; unwrap it after parsing. Signature verification below
+      // still runs over the untouched rawBody.
+      payload = extractSep24Transaction(JSON.parse(rawBody));
     } catch {
       return createProblemDetails(
         "about:blank",
@@ -120,7 +124,10 @@ export async function POST(request: NextRequest) {
       const parsedBody = JSON.parse(rawBody) || {};
       await enqueueWebhookRetry(
         "sep24_transaction",
-        parsedBody,
+        extractSep24Transaction(parsedBody) as unknown as Record<
+          string,
+          unknown
+        >,
         error instanceof Error ? error.message : "Unknown error",
       );
     } catch {
