@@ -78,6 +78,7 @@ import { DELETE as bankAccountDelete } from "./api/wallet/banks/route";
 import { GET as dashboardGiftsGet } from "./api/dashboard/gifts/route";
 
 // Savings
+import { GET as savingsDashboardGet } from "./api/savings/dashboard/route";
 import { POST as savingsTrustlinePost } from "./api/savings/trustline/route";
 
 export const apiRouter = Router();
@@ -161,6 +162,10 @@ apiRouter.post(
 );
 
 // Savings routes
+apiRouter.get(
+  "/api/savings/dashboard",
+  makeExpressHandler(savingsDashboardGet),
+);
 apiRouter.post(
   "/api/savings/trustline",
   makeExpressHandler(savingsTrustlinePost),
