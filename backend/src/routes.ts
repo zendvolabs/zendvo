@@ -73,6 +73,7 @@ import { validateRequestSignature } from "./lib/middleware/signature_validator";
 
 // Wallet
 import { DELETE as bankAccountDelete } from "./api/wallet/banks/route";
+import { GET as walletTransactionsGet } from "./api/wallet/transactions/route";
 
 // Dashboard
 import { GET as dashboardGiftsGet } from "./api/dashboard/gifts/route";
@@ -148,6 +149,10 @@ apiRouter.post(
 apiRouter.get("/api/users/resolve", makeExpressHandler(resolveRecipientGet));
 
 // Wallet routes
+apiRouter.get(
+  "/api/wallet/transactions",
+  makeExpressHandler(walletTransactionsGet),
+);
 apiRouter.delete(
   "/api/wallet/banks/:id",
   makeExpressHandler(bankAccountDelete),
