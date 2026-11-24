@@ -80,6 +80,9 @@ import { GET as dashboardGiftsGet } from "./api/dashboard/gifts/route";
 // Savings
 import { POST as savingsTrustlinePost } from "./api/savings/trustline/route";
 
+// SEP-24 Webhook
+import { POST as sep24WebhookPost } from "./api/webhooks/sep24/route";
+
 export const apiRouter = Router();
 
 // Gifts routes
@@ -152,6 +155,9 @@ apiRouter.delete(
   "/api/wallet/banks/:id",
   makeExpressHandler(bankAccountDelete),
 );
+
+// SEP-24 anchor webhook listener
+apiRouter.post("/api/webhooks/sep24", makeExpressHandler(sep24WebhookPost));
 
 // Upload routes
 apiRouter.post(
