@@ -75,7 +75,10 @@ import { POST as walletDepositPost } from "./api/wallet/deposit/route";
 import { validateRequestSignature } from "./lib/middleware/signature_validator";
 
 // Wallet
-import { DELETE as bankAccountDelete } from "./api/wallet/banks/route";
+import {
+  DELETE as bankAccountDelete,
+  POST as linkBankAccountPost,
+} from "./api/wallet/banks/route";
 
 // Dashboard
 import { GET as dashboardGiftsGet } from "./api/dashboard/gifts/route";
@@ -157,6 +160,7 @@ apiRouter.post(
 );
 
 // Wallet routes
+apiRouter.post("/api/wallet/banks", makeExpressHandler(linkBankAccountPost));
 apiRouter.delete(
   "/api/wallet/banks/:id",
   makeExpressHandler(bankAccountDelete),

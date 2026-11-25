@@ -62,3 +62,26 @@ SAVINGS_VAULT_TRUSTLINE_ASSETS='{"CADQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOB
 - `SAVINGS_VAULT_TRUSTLINE_ASSETS` must be valid JSON; the endpoint fails with a configuration error otherwise.
 - The sponsor account sequence number is re-read from Horizon for every request so consecutive envelopes stay submittable.
 
+## Bank Account Encryption (Wallet Off-Ramp)
+
+`POST /api/wallet/banks` encrypts account numbers at rest with AES-256-GCM and
+deduplicates them with a keyed HMAC-SHA256 fingerprint. There are no default keys:
+if a variable below is missing or malformed the endpoint returns a 500 and stores nothing.
+
+- `BANK_ACCOUNT_ENCRYPTION_KEY` - 32-byte AES-256 key, hex (64 chars) or base64
+- `BANK_ACCOUNT_ENCRYPTION_KEY_VERSION` - Optional positive integer stored with each row to support key rotation (default: `1`)
+- `BANK_ACCOUNT_FINGERPRINT_KEY` - Secret of at least 32 bytes (hex or base64) for the HMAC fingerprint; keep it different from the encryption key
+
+### Example
+
+```bash
+# Generate each key separately: openssl rand -hex 32
+BANK_ACCOUNT_ENCRYPTION_KEY=<64 hex chars>
+BANK_ACCOUNT_ENCRYPTION_KEY_VERSION=1
+BANK_ACCOUNT_FINGERPRINT_KEY=<64 hex chars>
+```
+
+### Notes
+
+- Changing `BANK_ACCOUNT_FINGERPRINT_KEY` invalidates duplicate detection for existing rows; treat it as a re-index, not a routine rotation.
+- Never log or commit these values.
