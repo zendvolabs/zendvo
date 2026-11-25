@@ -1,8 +1,10 @@
 import {
   recordFailedSavingsTransaction,
   recordPendingSavingsTransaction,
+  recordSuccessfulSavingsTransaction,
   type FailedSavingsTransactionInput,
   type PendingSavingsTransactionInput,
+  type SuccessfulSavingsTransactionInput,
 } from "../../src/server/actions";
 import { savingsHistory, users } from "../../src/lib/db/schema";
 
@@ -34,16 +36,20 @@ const mockTxFrom = jest.fn(() => ({ where: mockTxLockWhere }));
 const mockTxSelect = jest.fn(() => ({ from: mockTxFrom }));
 const mockTxUpdateReturning = jest.fn();
 const mockTxUpdateWhere = jest.fn(() => ({ returning: mockTxUpdateReturning }));
-const mockTxUpdateSet = jest.fn(() => ({ where: mockTxUpdateWhere }));
+const mockTxUpdateSet = jest.fn((_values: unknown) => ({
+  where: mockTxUpdateWhere,
+}));
 const mockTxUpdate = jest.fn(() => ({ set: mockTxUpdateSet }));
 const mockTxInsertReturning = jest.fn();
 const mockTxInsertValues = jest.fn(() => ({ returning: mockTxInsertReturning }));
 const mockTxInsert = jest.fn(() => ({ values: mockTxInsertValues }));
+const mockTxExecute = jest.fn(async () => undefined);
 const mockTx = {
   select: mockTxSelect,
   query: { savingsHistory: { findFirst: mockFindSavingsHistory } },
   update: mockTxUpdate,
   insert: mockTxInsert,
+  execute: mockTxExecute,
 };
 const mockTransaction = jest.fn(
   (callback: (tx: typeof mockTx) => Promise<unknown>) => callback(mockTx),
@@ -85,6 +91,14 @@ const validFailedInput: FailedSavingsTransactionInput = {
   type: "deposit",
   amount: 25,
   errorMessage: "Transaction timed out",
+  vaultContractId: "vault-1",
+  transactionHash: VALID_HASH,
+};
+
+const validSuccessfulInput: SuccessfulSavingsTransactionInput = {
+  userId: AUTH_PAYLOAD.userId,
+  type: "deposit",
+  amount: 25,
   vaultContractId: "vault-1",
   transactionHash: VALID_HASH,
 };
@@ -156,6 +170,10 @@ describe("recordFailedSavingsTransaction", () => {
       transaction: { id: "history-1", status: "failed" },
     });
     expect(mockTxForUpdate).toHaveBeenCalledWith("update");
+    expect(mockTxExecute).toHaveBeenCalledTimes(1);
+    expect(mockTxExecute.mock.invocationCallOrder[0]).toBeLessThan(
+      mockFindSavingsHistory.mock.invocationCallOrder[0],
+    );
     expect(mockTxInsertValues).toHaveBeenCalledWith({
       userId: validFailedInput.userId,
       vaultContractId: validFailedInput.vaultContractId,
@@ -212,6 +230,77 @@ describe("recordFailedSavingsTransaction", () => {
     const result = await recordFailedSavingsTransaction(validFailedInput);
 
     expect(result).toEqual({ success: false, error: "User not found" });
+    expect(mockTxInsert).not.toHaveBeenCalled();
+  });
+});
+
+describe("recordSuccessfulSavingsTransaction", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockLockedUserResult.mockReturnValue([lockedUser]);
+  });
+
+  it("promotes a failed record and applies the deposit exactly once", async () => {
+    const failedHistory = {
+      id: "history-1",
+      userId: validSuccessfulInput.userId,
+      status: "failed",
+      amount: validSuccessfulInput.amount,
+    };
+    const completedHistory = { ...failedHistory, status: "completed" };
+    mockFindSavingsHistory
+      .mockResolvedValueOnce(failedHistory)
+      .mockResolvedValueOnce(completedHistory);
+    mockLockedUserResult
+      .mockReturnValueOnce([lockedUser])
+      .mockReturnValueOnce([{ ...lockedUser, savingsBalance: 125 }]);
+    mockTxUpdateReturning
+      .mockResolvedValueOnce([completedHistory])
+      .mockResolvedValueOnce([{ savingsBalance: 125 }]);
+
+    const firstResult =
+      await recordSuccessfulSavingsTransaction(validSuccessfulInput);
+    const secondResult =
+      await recordSuccessfulSavingsTransaction(validSuccessfulInput);
+
+    expect(firstResult).toEqual({
+      success: true,
+      transaction: completedHistory,
+      balance: 125,
+    });
+    expect(secondResult).toEqual({
+      success: true,
+      transaction: completedHistory,
+      balance: 125,
+    });
+    expect(mockTxExecute).toHaveBeenCalledTimes(2);
+    expect(mockTxUpdate).toHaveBeenCalledTimes(2);
+    expect(mockTxUpdate).toHaveBeenNthCalledWith(1, savingsHistory);
+    expect(mockTxUpdate).toHaveBeenNthCalledWith(2, users);
+    expect(mockTxUpdateSet.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ status: "completed" }),
+    );
+    expect(mockRevalidatePath).toHaveBeenCalledTimes(2);
+  });
+
+  it("leaves an already completed record and balance unchanged", async () => {
+    const completedHistory = {
+      id: "history-1",
+      userId: validSuccessfulInput.userId,
+      status: "completed",
+    };
+    mockFindSavingsHistory.mockResolvedValue(completedHistory);
+
+    const result =
+      await recordSuccessfulSavingsTransaction(validSuccessfulInput);
+
+    expect(result).toEqual({
+      success: true,
+      transaction: completedHistory,
+      balance: lockedUser.savingsBalance,
+    });
+    expect(mockTxExecute).toHaveBeenCalledTimes(1);
+    expect(mockTxUpdate).not.toHaveBeenCalled();
     expect(mockTxInsert).not.toHaveBeenCalled();
   });
 });

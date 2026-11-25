@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, sql, type SQL } from "drizzle-orm";
 import { validateGiftPricing } from "@/lib/pricing";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/cookies";
 import { db } from "@/lib/db";
@@ -10,6 +10,15 @@ import { savingsHistory, transactions, users, wallets } from "@/lib/db/schema";
 import { verifyAccessToken } from "@/lib/tokens";
 
 const BLOCKCHAIN_TX_HASH_REGEX = /^[a-fA-F0-9]{64}$/;
+
+async function lockSavingsTransactionHash(
+  execute: (query: SQL) => Promise<unknown>,
+  transactionHash: string,
+) {
+  await execute(
+    sql`SELECT pg_advisory_xact_lock(hashtext(${transactionHash}))`,
+  );
+}
 
 export interface PendingSavingsTransactionInput {
   type: "deposit" | "withdrawal";
@@ -175,9 +184,9 @@ function validateSuccessfulSavingsInput(input: SuccessfulSavingsTransactionInput
  * The user's ledger row is locked with `FOR UPDATE` so concurrent deposits and
  * withdrawals are serialized. A matching `savings_history.transaction_hash`
  * makes the operation idempotent: a completed entry is returned unchanged, a
- * pending entry is promoted to completed, and a hash claimed by another user is
- * rejected. Balance and status updates happen in the same transaction so a
- * failure rolls back every write.
+ * pending or failed entry is promoted to completed, and a hash claimed by
+ * another user is rejected. Balance and status updates happen in the same
+ * transaction so a failure rolls back every write.
  */
 export async function recordSuccessfulSavingsTransaction(
   input: SuccessfulSavingsTransactionInput,
@@ -202,6 +211,11 @@ export async function recordSuccessfulSavingsTransaction(
         throw new Error("User not found");
       }
 
+      await lockSavingsTransactionHash(
+        (query) => tx.execute(query),
+        transactionHash,
+      );
+
       const existing = await tx.query.savingsHistory.findFirst({
         where: eq(savingsHistory.transactionHash, transactionHash),
       });
@@ -211,7 +225,7 @@ export async function recordSuccessfulSavingsTransaction(
           throw new Error("Transaction hash already claimed by another user");
         }
 
-        if (existing.status === "pending") {
+        if (existing.status === "pending" || existing.status === "failed") {
           const [updatedHistory] = await tx
             .update(savingsHistory)
             .set({
@@ -372,6 +386,11 @@ export async function recordFailedSavingsTransaction(
       if (!lockedUser) {
         throw new Error("User not found");
       }
+
+      await lockSavingsTransactionHash(
+        (query) => tx.execute(query),
+        transactionHash,
+      );
 
       const existing = await tx.query.savingsHistory.findFirst({
         where: eq(savingsHistory.transactionHash, transactionHash),
