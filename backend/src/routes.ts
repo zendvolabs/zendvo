@@ -85,6 +85,7 @@ import { GET as dashboardGiftsGet } from "./api/dashboard/gifts/route";
 import { GET as dashboardStatsGet } from "./api/dashboard/stats/route";
 
 // Savings
+import { GET as savingsDashboardGet } from "./api/savings/dashboard/route";
 import { POST as savingsTrustlinePost } from "./api/savings/trustline/route";
 
 // SEP-24 Webhook
@@ -185,6 +186,10 @@ apiRouter.post(
 );
 
 // Savings routes
+apiRouter.get(
+  "/api/savings/dashboard",
+  makeExpressHandler(savingsDashboardGet),
+);
 apiRouter.post(
   "/api/savings/trustline",
   makeExpressHandler(savingsTrustlinePost),
