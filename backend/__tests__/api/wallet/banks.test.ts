@@ -206,6 +206,20 @@ describe("bank-encryption", () => {
     ).toThrow();
   });
 
+  it("rejects keys containing characters outside hex/base64 instead of silently dropping them", () => {
+    process.env.BANK_ACCOUNT_FINGERPRINT_KEY = "!" + "b".repeat(63);
+    expect(() => fingerprintAccountNumber("0123456789")).toThrow(/hex or base64/);
+  });
+
+  it("accepts valid base64 keys, padded or not", () => {
+    const raw = Buffer.alloc(32, 7);
+    process.env.BANK_ACCOUNT_ENCRYPTION_KEY = raw.toString("base64");
+    process.env.BANK_ACCOUNT_FINGERPRINT_KEY = raw.toString("base64").replace(/=+$/, "");
+    const enc = encryptAccountNumber("0123456789");
+    expect(decryptAccountNumber(enc)).toBe("0123456789");
+    expect(fingerprintAccountNumber("0123456789")).toMatch(/^[0-9a-f]{64}$/);
+  });
+
   it("rejects short keys", () => {
     process.env.BANK_ACCOUNT_ENCRYPTION_KEY = "abcd";
     expect(() => encryptAccountNumber("0123456789")).toThrow(/32 bytes/);

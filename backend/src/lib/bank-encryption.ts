@@ -39,9 +39,16 @@ function decodeKey(raw: string | undefined, name: string, minBytes: number) {
     throw new BankEncryptionConfigError(`${name} is not configured`);
   }
   const value = raw.trim();
-  const buf = /^[0-9a-fA-F]+$/.test(value) && value.length % 2 === 0
-    ? Buffer.from(value, "hex")
-    : Buffer.from(value, "base64");
+  let buf: Buffer;
+  if (/^[0-9a-fA-F]+$/.test(value) && value.length % 2 === 0) {
+    buf = Buffer.from(value, "hex");
+  } else if (/^[A-Za-z0-9+/]+={0,2}$/.test(value)) {
+    // Node silently drops characters outside the base64 alphabet, which would
+    // decode a typo'd key to a different value instead of failing closed.
+    buf = Buffer.from(value, "base64");
+  } else {
+    throw new BankEncryptionConfigError(`${name} must be hex or base64`);
+  }
   if (buf.length < minBytes) {
     throw new BankEncryptionConfigError(
       `${name} must decode to at least ${minBytes} bytes`,
