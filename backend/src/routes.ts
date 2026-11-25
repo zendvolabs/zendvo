@@ -63,26 +63,49 @@ import { POST as verifyDeletionOtpPost } from "./api/auth/verify-deletion-otp/ro
 // Users
 import { GET as resolveRecipientGet } from "./api/users/resolve/route";
 
+// Transactions
+import { POST as submitTransactionPost } from "@/api/transactions/submit";
+
 // Upload
 import { POST as uploadImagePost } from "./api/upload/image/route";
 
 // Gifts
 import { POST as giftAppreciatePost } from "./api/gifts/appreciate/route";
+import { POST as walletDepositPost } from "./api/wallet/deposit/route";
+import { validateRequestSignature } from "./lib/middleware/signature_validator";
 
 // Wallet
-import { POST as linkBankAccountPost } from "./api/wallet/banks/route";
+import {
+  DELETE as bankAccountDelete,
+  POST as linkBankAccountPost,
+} from "./api/wallet/banks/route";
+
+// Dashboard
+import { GET as dashboardGiftsGet } from "./api/dashboard/gifts/route";
+
+// Savings
+import { POST as savingsTrustlinePost } from "./api/savings/trustline/route";
 
 export const apiRouter = Router();
 
 // Gifts routes
+apiRouter.post(
+  "/api/wallet/deposit",
+  validateRequestSignature,
+  makeExpressHandler(walletDepositPost),
+);
+
 apiRouter.post(
   "/api/gifts/:id/appreciate",
   makeExpressHandler(giftAppreciatePost),
 );
 apiRouter.post("/api/gifts/appreciate", makeExpressHandler(giftAppreciatePost));
 
-// Wallet routes
-apiRouter.post("/api/wallet/banks", makeExpressHandler(linkBankAccountPost));
+// Dashboard routes
+apiRouter.get(
+  "/api/dashboard/gifts",
+  makeExpressHandler(dashboardGiftsGet),
+);
 
 // Authentication routes
 apiRouter.post("/api/auth", makeExpressHandler(authPost));
@@ -130,9 +153,28 @@ apiRouter.post(
 // Users routes
 apiRouter.get("/api/users/resolve", makeExpressHandler(resolveRecipientGet));
 
+// Transactions routes
+apiRouter.post(
+  "/api/transactions/submit",
+  makeExpressHandler(submitTransactionPost),
+);
+
+// Wallet routes
+apiRouter.post("/api/wallet/banks", makeExpressHandler(linkBankAccountPost));
+apiRouter.delete(
+  "/api/wallet/banks/:id",
+  makeExpressHandler(bankAccountDelete),
+);
+
 // Upload routes
 apiRouter.post(
   "/api/upload/image",
   limitUploadSize,
   makeExpressHandler(uploadImagePost),
+);
+
+// Savings routes
+apiRouter.post(
+  "/api/savings/trustline",
+  makeExpressHandler(savingsTrustlinePost),
 );
