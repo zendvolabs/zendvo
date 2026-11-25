@@ -307,6 +307,128 @@ export async function recordSuccessfulSavingsTransaction(
   }
 }
 
+export interface FailedSavingsTransactionInput {
+  userId: string;
+  type: "deposit" | "withdrawal";
+  amount: number;
+  errorMessage: string;
+  vaultContractId: string;
+  transactionHash: string;
+}
+
+function validateFailedSavingsInput(input: FailedSavingsTransactionInput) {
+  const amount = Number(input.amount);
+  const errorMessage = input.errorMessage?.trim();
+  const transactionHash = input.transactionHash?.trim();
+  const vaultContractId = input.vaultContractId?.trim();
+
+  if (!input.userId?.trim()) {
+    return { error: "userId is required" as const };
+  }
+  if (input.type !== "deposit" && input.type !== "withdrawal") {
+    return { error: "Invalid transaction type" as const };
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { error: "Amount must be greater than zero" as const };
+  }
+  if (!errorMessage) {
+    return { error: "Error message is required" as const };
+  }
+  if (!vaultContractId) {
+    return { error: "Vault contract id is required" as const };
+  }
+  if (!transactionHash || !BLOCKCHAIN_TX_HASH_REGEX.test(transactionHash)) {
+    return {
+      error: "Valid 64-character blockchain transaction hash is required" as const,
+    };
+  }
+
+  return { amount, errorMessage, transactionHash, vaultContractId };
+}
+
+/**
+ * Records a failed on-chain savings transaction without changing the user's
+ * ledger balance. The user row lock serializes updates with successful
+ * transaction confirmations.
+ */
+export async function recordFailedSavingsTransaction(
+  input: FailedSavingsTransactionInput,
+) {
+  const validated = validateFailedSavingsInput(input);
+  if ("error" in validated) {
+    return { success: false, error: validated.error };
+  }
+
+  const { amount, errorMessage, transactionHash, vaultContractId } = validated;
+
+  try {
+    const transaction = await db.transaction(async (tx) => {
+      const [lockedUser] = await tx
+        .select()
+        .from(users)
+        .where(eq(users.id, input.userId))
+        .for("update");
+
+      if (!lockedUser) {
+        throw new Error("User not found");
+      }
+
+      const existing = await tx.query.savingsHistory.findFirst({
+        where: eq(savingsHistory.transactionHash, transactionHash),
+      });
+
+      if (existing) {
+        if (existing.userId !== input.userId) {
+          throw new Error("Transaction hash already claimed by another user");
+        }
+        if (existing.status === "completed") {
+          throw new Error("Cannot mark a completed savings transaction as failed");
+        }
+
+        const [updatedHistory] = await tx
+          .update(savingsHistory)
+          .set({ status: "failed", errorMessage, updatedAt: new Date() })
+          .where(eq(savingsHistory.id, existing.id))
+          .returning();
+
+        if (!updatedHistory) {
+          throw new Error("Failed to update savings history entry");
+        }
+
+        return updatedHistory;
+      }
+
+      const [inserted] = await tx
+        .insert(savingsHistory)
+        .values({
+          userId: input.userId,
+          vaultContractId,
+          type: input.type,
+          status: "failed",
+          amount,
+          currency: "USDC",
+          transactionHash,
+          errorMessage,
+        })
+        .returning();
+
+      if (!inserted) {
+        throw new Error("Failed to insert savings history entry");
+      }
+
+      return inserted;
+    });
+
+    revalidatePath("/dashboard");
+    return { success: true, transaction };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Unknown error",
+    };
+  }
+}
+
 /** Validates gift pricing and refreshes the dashboard after creation. */
 export async function createGift(formData: FormData) {
   console.log("Creating gift...");
