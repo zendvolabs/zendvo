@@ -1,5 +1,9 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { makeExpressHandler } from "./adapter";
+import {
+  useSubmittedStellarAddressForSignature,
+  validateRequestSignature,
+} from "@/lib/middleware/signature_validator";
 
 // Streaming middleware to limit upload request size to 10MB without relying solely on Content-Length
 const limitUploadSize = (req: Request, res: Response, next: NextFunction) => {
@@ -72,7 +76,6 @@ import { POST as uploadImagePost } from "./api/upload/image/route";
 // Gifts
 import { POST as giftAppreciatePost } from "./api/gifts/appreciate/route";
 import { POST as walletDepositPost } from "./api/wallet/deposit/route";
-import { validateRequestSignature } from "./lib/middleware/signature_validator";
 
 // Wallet
 import { GET as walletBalanceGet } from "./api/wallet/balance/route";
@@ -91,6 +94,8 @@ import { POST as savingsTrustlinePost } from "./api/savings/trustline/route";
 
 // SEP-24 Webhook
 import { POST as sep24WebhookPost } from "./api/webhooks/sep24/route";
+
+import { POST as walletRegisterPost } from "@/api/wallet/register/route";
 
 export const apiRouter = Router();
 
@@ -188,6 +193,13 @@ apiRouter.post(
   "/api/upload/image",
   limitUploadSize,
   makeExpressHandler(uploadImagePost),
+);
+
+apiRouter.post(
+  "/api/wallet/register",
+  useSubmittedStellarAddressForSignature,
+  validateRequestSignature,
+  makeExpressHandler(walletRegisterPost),
 );
 
 // Savings routes
