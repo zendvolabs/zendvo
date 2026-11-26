@@ -41,11 +41,16 @@ export async function register() {
       const { runTransactionVerifierCron } = await import(
         "@/jobs/transaction_verifier"
       );
-      
+      const { startWebhookRetryJob } = await import(
+        "@/server/jobs/processWebhookRetries"
+      );
+
       startGiftReleaseJob();
       runTransactionVerifierCron();
+      startWebhookRetryJob();
       console.log("🚀 Scheduled Gift Release Cron Job successfully running.");
       console.log("🚀 Scheduled Transaction Verifier Cron Job successfully running.");
+      console.log("🚀 Scheduled Webhook Retry Cron Job successfully running.");
     } catch (cronError) {
       console.error("❌ Failed to initialize background cron jobs:", cronError);
     }

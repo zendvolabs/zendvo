@@ -63,6 +63,9 @@ import { POST as verifyDeletionOtpPost } from "./api/auth/verify-deletion-otp/ro
 // Users
 import { GET as resolveRecipientGet } from "./api/users/resolve/route";
 
+// Transactions
+import { POST as submitTransactionPost } from "@/api/transactions/submit";
+
 // Upload
 import { POST as uploadImagePost } from "./api/upload/image/route";
 
@@ -72,17 +75,25 @@ import { POST as walletDepositPost } from "./api/wallet/deposit/route";
 import { validateRequestSignature } from "./lib/middleware/signature_validator";
 
 // Wallet
-import { DELETE as bankAccountDelete } from "./api/wallet/banks/route";
+import { GET as walletBalanceGet } from "./api/wallet/balance/route";
+import {
+  DELETE as bankAccountDelete,
+  POST as linkBankAccountPost,
+} from "./api/wallet/banks/route";
 
 // Dashboard
 import { GET as dashboardGiftsGet } from "./api/dashboard/gifts/route";
+import { GET as dashboardStatsGet } from "./api/dashboard/stats/route";
 
 // Savings
+import { GET as savingsDashboardGet } from "./api/savings/dashboard/route";
 import { POST as savingsTrustlinePost } from "./api/savings/trustline/route";
 
 // Wallet
 import { POST as walletWithdrawPost } from "./api/wallet/withdraw";
 import { validateRequestSignature } from "./lib/middleware/signature_validator";
+// SEP-24 Webhook
+import { POST as sep24WebhookPost } from "./api/webhooks/sep24/route";
 
 export const apiRouter = Router();
 
@@ -103,6 +114,10 @@ apiRouter.post("/api/gifts/appreciate", makeExpressHandler(giftAppreciatePost));
 apiRouter.get(
   "/api/dashboard/gifts",
   makeExpressHandler(dashboardGiftsGet),
+);
+apiRouter.get(
+  "/api/dashboard/stats",
+  makeExpressHandler(dashboardStatsGet),
 );
 
 // Authentication routes
@@ -151,10 +166,24 @@ apiRouter.post(
 // Users routes
 apiRouter.get("/api/users/resolve", makeExpressHandler(resolveRecipientGet));
 
+// Transactions routes
+apiRouter.post(
+  "/api/transactions/submit",
+  makeExpressHandler(submitTransactionPost),
+);
+
 // Wallet routes
+apiRouter.post("/api/wallet/banks", makeExpressHandler(linkBankAccountPost));
 apiRouter.delete(
   "/api/wallet/banks/:id",
   makeExpressHandler(bankAccountDelete),
+);
+
+// SEP-24 anchor webhook listener
+apiRouter.post("/api/webhooks/sep24", makeExpressHandler(sep24WebhookPost));
+apiRouter.get(
+  "/api/wallet/balance",
+  makeExpressHandler(walletBalanceGet),
 );
 
 // Upload routes
@@ -170,6 +199,10 @@ apiRouter.post(
   validateRequestSignature,
   makeExpressHandler(walletWithdrawPost),
 // Savings routes
+apiRouter.get(
+  "/api/savings/dashboard",
+  makeExpressHandler(savingsDashboardGet),
+);
 apiRouter.post(
   "/api/savings/trustline",
   makeExpressHandler(savingsTrustlinePost),
