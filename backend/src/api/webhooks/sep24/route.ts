@@ -32,10 +32,19 @@ export async function POST(request: NextRequest) {
 
     let payload: Sep24TransactionPayload;
     try {
+      const parsed: unknown = JSON.parse(rawBody);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return createProblemDetails(
+          "about:blank",
+          "Bad Request",
+          400,
+          "Invalid JSON payload",
+        );
+      }
       // The anchor wraps the transaction in a {"transaction": {...}}
       // envelope; unwrap it after parsing. Signature verification below
       // still runs over the untouched rawBody.
-      payload = extractSep24Transaction(JSON.parse(rawBody));
+      payload = extractSep24Transaction(parsed);
     } catch {
       return createProblemDetails(
         "about:blank",

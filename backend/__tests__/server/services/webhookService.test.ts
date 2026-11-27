@@ -403,6 +403,15 @@ describe("processSep24Webhook validation", () => {
       error: "Missing transaction status in payload",
     });
   });
+
+  it("rejects a non-object payload", async () => {
+    const result = await processSep24Webhook(null as never);
+
+    expect(result).toEqual({
+      processed: false,
+      error: "Invalid webhook payload",
+    });
+  });
 });
 
 describe("extractSep24Transaction", () => {
@@ -644,6 +653,50 @@ describe("processSep24Webhook — wallet effects and transitions", () => {
     expect(mockDb.transaction).not.toHaveBeenCalled();
     expect(mockDb.insert).not.toHaveBeenCalled();
   });
+
+  it("maps pending_user_transfer_start to submitted and creates notification", async () => {
+    const { setMock, valuesMock } = setupDbMocks({
+      transactionRow: { ...INTERNAL_TX, status: "pending" },
+    });
+
+    const result = await processSep24Webhook({
+      ...COMPLETED_DEPOSIT,
+      status: "pending_user_transfer_start",
+    });
+
+    expect(result).toEqual({ processed: true });
+    expect(setMock.mock.calls[0][0]).toEqual({ status: "submitted" });
+    expect(mockDb.insert).toHaveBeenCalledWith(notifications);
+    expect(mockDb.insert).not.toHaveBeenCalledWith(wallets);
+    expect(valuesMock.mock.calls[0][0]).toMatchObject({
+      type: "sep24_deposit_pending_user_transfer_start",
+      title: "Deposit awaiting transfer",
+    });
+  });
+
+  it.each([
+    ["expired", "Deposit expired"],
+    ["error", "Deposit failed"],
+  ] as const)(
+    "maps %s to failed and creates notification without updating wallet",
+    async (sep24Status, expectedTitle) => {
+      const { setMock, valuesMock } = setupDbMocks();
+
+      const result = await processSep24Webhook({
+        ...COMPLETED_DEPOSIT,
+        status: sep24Status,
+      });
+
+      expect(result).toEqual({ processed: true });
+      expect(setMock.mock.calls[0][0]).toEqual({ status: "failed" });
+      expect(mockDb.insert).toHaveBeenCalledWith(notifications);
+      expect(mockDb.insert).not.toHaveBeenCalledWith(wallets);
+      expect(valuesMock.mock.calls[0][0]).toMatchObject({
+        type: `sep24_deposit_${sep24Status}`,
+        title: expectedTitle,
+      });
+    },
+  );
 });
 
 describe("processWebhookRetryQueue — atomic claim and backoff timing", () => {

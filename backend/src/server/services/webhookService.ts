@@ -245,6 +245,10 @@ async function findTransactionByAnchorId(anchorTxId: string) {
 export async function processSep24Webhook(
   payload: Sep24TransactionPayload,
 ): Promise<{ processed: boolean; error?: string }> {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return { processed: false, error: "Invalid webhook payload" };
+  }
+
   const { id: anchorTxId, kind, status, amount_in, amount_out, asset_code } =
     payload;
 
@@ -345,7 +349,7 @@ export async function processSep24Webhook(
     // failure anywhere rolls the whole thing back for a clean retry.
     if (status === "completed" && kind === "deposit" && settledAmount) {
       const amount = parseFloat(settledAmount);
-      if (!isNaN(amount) && amount > 0) {
+      if (Number.isFinite(amount) && amount > 0) {
         await creditWallet(tx, internalTx.userId, currency, amount);
       }
     }
@@ -353,7 +357,7 @@ export async function processSep24Webhook(
     // For completed withdrawals, debit the user's wallet
     if (status === "completed" && kind === "withdrawal" && settledAmount) {
       const amount = parseFloat(settledAmount);
-      if (!isNaN(amount) && amount > 0) {
+      if (Number.isFinite(amount) && amount > 0) {
         await debitWallet(tx, internalTx.userId, currency, amount);
       }
     }
