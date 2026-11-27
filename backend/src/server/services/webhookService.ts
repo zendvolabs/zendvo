@@ -245,6 +245,10 @@ async function findTransactionByAnchorId(anchorTxId: string) {
 export async function processSep24Webhook(
   payload: Sep24TransactionPayload,
 ): Promise<{ processed: boolean; error?: string }> {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return { processed: false, error: "Invalid webhook payload" };
+  }
+
   const { id: anchorTxId, kind, status, amount_in, amount_out, asset_code } =
     payload;
 
@@ -318,6 +322,18 @@ export async function processSep24Webhook(
   const settledAmount =
     kind === "deposit" ? (amount_out ?? amount_in) : amount_in;
 
+  let completedAmount: number | null = null;
+  if (status === "completed" && settledAmount) {
+    const parsedAmount = parseFloat(settledAmount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      return {
+        processed: false,
+        error: `Invalid settled amount for completed ${kind}: "${settledAmount}"`,
+      };
+    }
+    completedAmount = parsedAmount;
+  }
+
   return db.transaction(async (tx) => {
     // Concurrency-safe completion claim: only proceed if the transaction
     // still holds a status this transition may move from. A concurrent
@@ -343,19 +359,13 @@ export async function processSep24Webhook(
     // (delivered) amount. The status is only marked completed as part of
     // this same transaction, after the balance change is queued here — a
     // failure anywhere rolls the whole thing back for a clean retry.
-    if (status === "completed" && kind === "deposit" && settledAmount) {
-      const amount = parseFloat(settledAmount);
-      if (!isNaN(amount) && amount > 0) {
-        await creditWallet(tx, internalTx.userId, currency, amount);
-      }
+    if (completedAmount !== null && kind === "deposit") {
+      await creditWallet(tx, internalTx.userId, currency, completedAmount);
     }
 
     // For completed withdrawals, debit the user's wallet
-    if (status === "completed" && kind === "withdrawal" && settledAmount) {
-      const amount = parseFloat(settledAmount);
-      if (!isNaN(amount) && amount > 0) {
-        await debitWallet(tx, internalTx.userId, currency, amount);
-      }
+    if (completedAmount !== null && kind === "withdrawal") {
+      await debitWallet(tx, internalTx.userId, currency, completedAmount);
     }
 
     // Create a notification for the user
