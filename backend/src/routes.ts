@@ -92,6 +92,9 @@ import { GET as dashboardStatsGet } from "./api/dashboard/stats/route";
 import { GET as savingsDashboardGet } from "./api/savings/dashboard/route";
 import { POST as savingsTrustlinePost } from "./api/savings/trustline/route";
 
+// Wallet trustline
+import { POST as walletUsdcTrustlinePost } from "./api/wallet/trustline";
+
 // SEP-24 Webhook
 import { POST as sep24WebhookPost } from "./api/webhooks/sep24/route";
 
@@ -210,4 +213,11 @@ apiRouter.get(
 apiRouter.post(
   "/api/savings/trustline",
   makeExpressHandler(savingsTrustlinePost),
+);
+
+// Wallet trustline routes
+apiRouter.post(
+  "/api/wallet/trustline/usdc",
+  validateRequestSignature,
+  makeExpressHandler(walletUsdcTrustlinePost),
 );
