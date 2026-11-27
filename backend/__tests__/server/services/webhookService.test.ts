@@ -697,6 +697,43 @@ describe("processSep24Webhook — wallet effects and transitions", () => {
       });
     },
   );
+
+  it.each(["-25.00", "0", "Infinity", "not-a-number"])(
+    "rejects a completed deposit with invalid settled amount (%s) before claiming",
+    async (badAmount) => {
+      setupDbMocks();
+
+      const result = await processSep24Webhook({
+        ...COMPLETED_DEPOSIT,
+        amount_out: badAmount,
+      });
+
+      expect(result.processed).toBe(false);
+      expect(result.error).toContain("Invalid settled amount");
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+      expect(mockDb.insert).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["-25.00", "0", "Infinity", "not-a-number"])(
+    "rejects a completed withdrawal with invalid settled amount (%s) before claiming",
+    async (badAmount) => {
+      setupDbMocks();
+
+      const result = await processSep24Webhook({
+        id: "anchor-tx-1",
+        kind: "withdrawal",
+        status: "completed",
+        amount_in: badAmount,
+        asset_code: "USDC",
+      });
+
+      expect(result.processed).toBe(false);
+      expect(result.error).toContain("Invalid settled amount");
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+      expect(mockDb.insert).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("processWebhookRetryQueue — atomic claim and backoff timing", () => {
