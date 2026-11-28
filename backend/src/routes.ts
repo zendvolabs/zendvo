@@ -1,5 +1,9 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { makeExpressHandler } from "./adapter";
+import {
+  useSubmittedStellarAddressForSignature,
+  validateRequestSignature,
+} from "@/lib/middleware/signature_validator";
 
 // Streaming middleware to limit upload request size to 10MB without relying solely on Content-Length
 const limitUploadSize = (req: Request, res: Response, next: NextFunction) => {
@@ -72,10 +76,10 @@ import { POST as uploadImagePost } from "./api/upload/image/route";
 // Gifts
 import { POST as giftAppreciatePost } from "./api/gifts/appreciate/route";
 import { POST as walletDepositPost } from "./api/wallet/deposit/route";
-import { validateRequestSignature } from "./lib/middleware/signature_validator";
 
 // Wallet
 import { GET as walletBalanceGet } from "./api/wallet/balance/route";
+import { POST as walletActivatePost } from "./api/wallet/activate/route";
 import {
   DELETE as bankAccountDelete,
   POST as linkBankAccountPost,
@@ -92,8 +96,13 @@ import { POST as savingsTrustlinePost } from "./api/savings/trustline/route";
 // Wallet
 import { POST as walletWithdrawPost } from "./api/wallet/withdraw";
 import { validateRequestSignature } from "./lib/middleware/signature_validator";
+// Wallet trustline
+import { POST as walletUsdcTrustlinePost } from "./api/wallet/trustline";
+
 // SEP-24 Webhook
 import { POST as sep24WebhookPost } from "./api/webhooks/sep24/route";
+
+import { POST as walletRegisterPost } from "@/api/wallet/register/route";
 
 export const apiRouter = Router();
 
@@ -174,6 +183,7 @@ apiRouter.post(
 
 // Wallet routes
 apiRouter.post("/api/wallet/banks", makeExpressHandler(linkBankAccountPost));
+apiRouter.post("/api/wallet/activate", makeExpressHandler(walletActivatePost));
 apiRouter.delete(
   "/api/wallet/banks/:id",
   makeExpressHandler(bankAccountDelete),
@@ -198,6 +208,13 @@ apiRouter.post(
   "/api/wallet/withdraw",
   validateRequestSignature,
   makeExpressHandler(walletWithdrawPost),
+apiRouter.post(
+  "/api/wallet/register",
+  useSubmittedStellarAddressForSignature,
+  validateRequestSignature,
+  makeExpressHandler(walletRegisterPost),
+);
+
 // Savings routes
 apiRouter.get(
   "/api/savings/dashboard",
@@ -206,4 +223,11 @@ apiRouter.get(
 apiRouter.post(
   "/api/savings/trustline",
   makeExpressHandler(savingsTrustlinePost),
+);
+
+// Wallet trustline routes
+apiRouter.post(
+  "/api/wallet/trustline/usdc",
+  validateRequestSignature,
+  makeExpressHandler(walletUsdcTrustlinePost),
 );

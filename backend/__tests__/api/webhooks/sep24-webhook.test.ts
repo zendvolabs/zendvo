@@ -105,6 +105,25 @@ describe("POST /api/webhooks/sep24", () => {
     expect(json.detail).toContain("Invalid JSON");
   });
 
+  it.each(["null", "[]", '"hello"', "123"])(
+    "returns 400 when JSON body is not an object (%s)",
+    async (rawJson) => {
+      const req = new NextRequest("http://localhost/api/webhooks/sep24", {
+        method: "POST",
+        headers: { "content-type": "application/json", host: "localhost" },
+        body: rawJson,
+      });
+
+      const res = await POST(req);
+      const json = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(json.title).toBe("Bad Request");
+      expect(json.detail).toContain("Invalid JSON");
+      expect(mockProcess).not.toHaveBeenCalled();
+    },
+  );
+
   // ── Signature verification ──────────────────────────────────────────────
 
   it("returns 401 when signature is invalid", async () => {

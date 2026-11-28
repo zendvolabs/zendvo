@@ -53,6 +53,21 @@ export interface SponsoredTrustlineResult {
   vaultContractId: string;
 }
 
+export interface BuildSponsoredUsdcTrustlineParams {
+  /** Registered Stellar account (`G...`) of the authenticated user. */
+  stellarAddress: string;
+  networkPassphrase?: string;
+}
+
+export interface SponsoredUsdcTrustlineResult {
+  /** Unsigned envelope XDR. Must be signed by the user and the sponsor. */
+  envelopeXdr: string;
+  networkPassphrase: string;
+  asset: TrustlineAsset;
+  sponsor: string;
+  account: string;
+}
+
 const STELLAR_ADDRESS_PATTERN = /^(G[A-Z2-7]{55})$/;
 const ASSET_CODE_PATTERN = /^[A-Za-z0-9]{1,12}$/;
 
@@ -191,6 +206,109 @@ export class TrustlineService {
 
   resolveAsset(vaultContractId: string): TrustlineAsset {
     return resolveVaultTrustlineAsset(vaultContractId, this.options.env);
+  }
+
+  /**
+   * Builds a sponsored `ChangeTrust` envelope for the platform USDC asset.
+   *
+   * Unlike `buildSponsoredTrustline`, this method does not require a vault
+   * contract id — it always targets the USDC asset identified by
+   * `STELLAR_USDC_ISSUER` (with an optional `SAVINGS_TRUSTLINE_ASSET_CODE`
+   * override). The sponsor pays both the transaction fee and the trustline
+   * base reserve. The returned envelope is unsigned: the user signs it with
+   * their Stellar keypair, then the platform sponsor co-signs and submits.
+   */
+  async buildSponsoredUsdcTrustline(
+    params: BuildSponsoredUsdcTrustlineParams,
+  ): Promise<SponsoredUsdcTrustlineResult> {
+    const env = this.options.env ?? process.env;
+    const { stellarAddress } = params;
+
+    if (
+      !STELLAR_ADDRESS_PATTERN.test(stellarAddress) ||
+      !StrKey.isValidEd25519PublicKey(stellarAddress)
+    ) {
+      throw new TrustlineError(
+        "A valid registered Stellar address (G...) is required.",
+        "INVALID_STELLAR_ADDRESS",
+        400,
+      );
+    }
+
+    const usdcIssuer = env.STELLAR_USDC_ISSUER;
+    if (!usdcIssuer || !StrKey.isValidEd25519PublicKey(usdcIssuer)) {
+      throw configurationError(
+        "STELLAR_USDC_ISSUER is not configured or is not a valid Stellar public key.",
+      );
+    }
+
+    const assetConfig: TrustlineAsset = {
+      code: env.SAVINGS_TRUSTLINE_ASSET_CODE || DEFAULT_SAVINGS_ASSET_CODE,
+      issuer: usdcIssuer,
+    };
+
+    const networkPassphrase = params.networkPassphrase ?? resolveNetworkPassphrase(env);
+    const sponsorKeypair = resolveSponsorKeypair(env);
+    const sponsorPublicKey = sponsorKeypair.publicKey();
+    const server =
+      this.options.horizonServer ??
+      new Horizon.Server(resolveHorizonUrl(env, networkPassphrase));
+
+    let sponsorAccount;
+    try {
+      sponsorAccount = await server.loadAccount(sponsorPublicKey);
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      throw new TrustlineError(
+        "Unable to load the platform sponsor account from Horizon.",
+        "SPONSOR_ACCOUNT_UNAVAILABLE",
+        502,
+        err,
+      );
+    }
+
+    try {
+      const asset = new Asset(assetConfig.code, assetConfig.issuer);
+
+      const transaction = new TransactionBuilder(sponsorAccount, {
+        fee: "100",
+        networkPassphrase,
+      })
+        .addOperation(
+          Operation.beginSponsoringFutureReserves({
+            sponsoredId: stellarAddress,
+          }),
+        )
+        .addOperation(
+          Operation.changeTrust({
+            asset,
+            source: stellarAddress,
+          }),
+        )
+        .addOperation(
+          Operation.endSponsoringFutureReserves({
+            source: stellarAddress,
+          }),
+        )
+        .setTimeout(DEFAULT_TRUSTLINE_TIMEOUT_SECONDS)
+        .build();
+
+      return {
+        envelopeXdr: transaction.toXDR(),
+        networkPassphrase,
+        asset: assetConfig,
+        sponsor: sponsorPublicKey,
+        account: stellarAddress,
+      };
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      throw new TrustlineError(
+        "Failed to build the sponsored USDC trustline transaction.",
+        "TRANSACTION_BUILD_ERROR",
+        500,
+        err,
+      );
+    }
   }
 
   async buildSponsoredTrustline(
