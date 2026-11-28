@@ -93,6 +93,9 @@ import { GET as dashboardStatsGet } from "./api/dashboard/stats/route";
 import { GET as savingsDashboardGet } from "./api/savings/dashboard/route";
 import { POST as savingsTrustlinePost } from "./api/savings/trustline/route";
 
+// Wallet
+import { POST as walletWithdrawPost } from "./api/wallet/withdraw";
+import { validateRequestSignature } from "./lib/middleware/signature_validator";
 // Wallet trustline
 import { POST as walletUsdcTrustlinePost } from "./api/wallet/trustline";
 
@@ -200,6 +203,11 @@ apiRouter.post(
   makeExpressHandler(uploadImagePost),
 );
 
+// Wallet routes
+apiRouter.post(
+  "/api/wallet/withdraw",
+  validateRequestSignature,
+  makeExpressHandler(walletWithdrawPost),
 apiRouter.post(
   "/api/wallet/register",
   useSubmittedStellarAddressForSignature,
